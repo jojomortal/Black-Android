@@ -18,6 +18,9 @@ namespace platform {
 void RedirectLog();
 // SDL hints this host sets, before SDL_Init
 void SetHints();
+// iOS gives an app no GPU work once it is told it goes to the background, and says so in a callback that must act at
+// once, which the main loop may not reach in time: this calls set_foreground from that callback. Nothing elsewhere
+void WatchLifecycle(void (*set_foreground)(bool));
 // app-specific storage: the settings, saves, logs and the shader cache
 std::filesystem::path DataDir();
 // where the game files or a disc image are looked for, in this order
@@ -36,6 +39,9 @@ void DestroyVulkanSurface(VkInstance instance, VkSurfaceKHR surface);
 bool SurfaceReady(SDL_Window* window);
 // a file shipped with the app (the touch controls' skin), as a path SDL can open
 std::filesystem::path AssetPath(const char* relative);
+// the part of the window the controls may sit in, in pixels: the notch's and the home indicator's insets are left out on iOS,
+// elsewhere it is the whole window
+void SafeAreaPixels(SDL_Window* window, float& x, float& y, float& w, float& h);
 // the touch controls are for a touch screen: always on a phone, on a Mac only while a direct touch device is present
 bool TouchControls();
 // a finger event of this touch device (SDL_TouchID) is the player's: not a Mac trackpad's

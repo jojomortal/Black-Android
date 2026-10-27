@@ -113,6 +113,8 @@ void WindowSetup(SDL_WindowFlags& flags, int&, int&) { flags |= SDL_WINDOW_FULLS
 
 void SetHints() { SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1"); }
 
+void WatchLifecycle(void (*)(bool)) {}
+
 // app-specific external storage: the player can reach the logs, saves and settings over USB
 fs::path DataDir() {
     const char* p = nullptr;
@@ -156,6 +158,13 @@ void DestroyVulkanSurface(VkInstance instance, VkSurfaceKHR surface) { vkDestroy
 bool SurfaceReady(SDL_Window* window) {
     SDL_PropertiesID props = SDL_GetWindowProperties(window);
     return SDL_GetPointerProperty(props, SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr) != nullptr;
+}
+
+void SafeAreaPixels(SDL_Window* window, float& x, float& y, float& w, float& h) {
+    int pw = 0, ph = 0;
+    if (window) SDL_GetWindowSizeInPixels(window, &pw, &ph);
+    x = y = 0;
+    w = float(pw), h = float(ph);
 }
 
 bool TouchControls() { return true; }

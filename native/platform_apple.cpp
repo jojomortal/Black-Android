@@ -69,7 +69,36 @@ void RedirectLog() {
 #endif
 }
 
-void SetHints() {}
+void SetHints() {
+#if TARGET_OS_IPHONE
+    // the home indicator dim, the first swipe from the bottom shows it and only the second goes home: no game gesture there
+    // ends in the home screen
+    SDL_SetHint(SDL_HINT_IOS_HIDE_HOME_INDICATOR, "2");
+#endif
+}
+
+#if TARGET_OS_IPHONE
+namespace {
+
+void (*g_set_foreground)(bool) = nullptr;
+
+bool SDLCALL LifecycleWatch(void*, SDL_Event* e) {
+    if (e->type == SDL_EVENT_WILL_ENTER_BACKGROUND) g_set_foreground(false);
+    else if (e->type == SDL_EVENT_DID_ENTER_FOREGROUND) g_set_foreground(true);
+    return true;
+}
+
+}  // namespace
+#endif
+
+void WatchLifecycle(void (*set_foreground)(bool)) {
+#if TARGET_OS_IPHONE
+    g_set_foreground = set_foreground;
+    SDL_AddEventWatch(LifecycleWatch, nullptr);
+#else
+    (void)set_foreground;
+#endif
+}
 
 // iOS: the screen. macOS: fullscreen, or a resizable window (its green button goes fullscreen) when display_mode is
 // 'windowed' in the settings or BLACK_WINDOWED=1; BLACK_FULLSCREEN=1 wins over the setting
@@ -188,6 +217,23 @@ bool SurfaceReady(SDL_Window* window) { return window != nullptr; }
 fs::path AssetPath(const char* relative) {
     const char* base = SDL_GetBasePath();
     return (base ? fs::path(base) : fs::path()) / relative;
+}
+
+void SafeAreaPixels(SDL_Window* window, float& x, float& y, float& w, float& h) {
+    int pw = 0, ph = 0;
+    if (window) SDL_GetWindowSizeInPixels(window, &pw, &ph);
+    x = y = 0;
+    w = float(pw), h = float(ph);
+#if TARGET_OS_IPHONE
+    // SDL's rectangle is in points: the notch side and the home indicator are outside it
+    SDL_Rect r;
+    int lw = 0, lh = 0;
+    if (window && SDL_GetWindowSafeArea(window, &r) && SDL_GetWindowSize(window, &lw, &lh) && lw > 0 && lh > 0) {
+        float kx = float(pw) / float(lw), ky = float(ph) / float(lh);
+        x = float(r.x) * kx, y = float(r.y) * ky;
+        w = float(r.w) * kx, h = float(r.h) * ky;
+    }
+#endif
 }
 
 // a Mac has no touch screen, but its trackpad reports fingers to SDL as an indirect touch device

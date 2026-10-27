@@ -684,6 +684,25 @@ float Height() {
     return float(std::max(h, 1));
 }
 
+// the controls' screen: the window less the insets the notch and the home indicator take (the whole window elsewhere);
+// the layout's shares are of this rectangle. Pump keeps it, the main thread
+std::atomic<float> g_safe_x{0}, g_safe_y{0}, g_safe_w{0}, g_safe_h{0};
+
+void UpdateSafeArea() {
+    float x, y, w, h;
+    platform::SafeAreaPixels(host::Window(), x, y, w, h);
+    g_safe_x = x, g_safe_y = y, g_safe_w = w, g_safe_h = h;
+}
+
+float SafeX() { return g_safe_w > 1 ? g_safe_x.load() : 0.0f; }
+float SafeY() { return g_safe_h > 1 ? g_safe_y.load() : 0.0f; }
+float SafeW() { return g_safe_w > 1 ? g_safe_w.load() : Width(); }
+float SafeH() { return g_safe_h > 1 ? g_safe_h.load() : Height(); }
+
+// where a control's share of the screen is, in pixels
+float LayoutX(size_t i) { return SafeX() + g_layout[i].x * SafeW(); }
+float LayoutY(size_t i) { return SafeY() + g_layout[i].y * SafeH(); }
+
 std::filesystem::path LayoutFile() { return app::ExeDir() / "layout.toml"; }
 
 void LoadLayout() {
@@ -756,8 +775,8 @@ bool ButtonShown(size_t i) {
 }
 
 void Centre(size_t i, float& cx, float& cy) {
-    cx = g_layout[i].x * Width();
-    cy = g_layout[i].y * Height();
+    cx = LayoutX(i);
+    cy = LayoutY(i);
 }
 
 float Radius(size_t i) { return g_layout[i].r * g_scale * Height(); }
@@ -832,7 +851,7 @@ size_t HitButton(float x, float y) {
 
 // on the stick's circle, with the buttons' slack: a fixed stick moved out of the left of the screen still takes it
 bool InStick(float x, float y) {
-    float cx = g_layout[kStick].x * Width(), cy = g_layout[kStick].y * Height(), r = Radius(kStick) * 1.25f;
+    float cx = LayoutX(kStick), cy = LayoutY(kStick), r = Radius(kStick) * 1.25f;
     return (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r;
 }
 
@@ -908,7 +927,7 @@ void EditDown(Finger& f, float x, float y) {
         return;
     }
     size_t b = HitButton(x, y);
-    float sx = g_layout[kStick].x * Width(), sy = g_layout[kStick].y * Height(), sr = Radius(kStick);
+    float sx = LayoutX(kStick), sy = LayoutY(kStick), sr = Radius(kStick);
     if (b == kButtonCount && (x - sx) * (x - sx) + (y - sy) * (y - sy) <= sr * sr) b = kStick;
     if (b > kStick) {
         g_selected = -1;
@@ -917,8 +936,8 @@ void EditDown(Finger& f, float x, float y) {
     g_selected = int(b);
     f.role = Role::Drag;
     f.button = b;
-    f.x0 = x - g_layout[b].x * Width();
-    f.y0 = y - g_layout[b].y * Height();
+    f.x0 = x - LayoutX(b);
+    f.y0 = y - LayoutY(b);
 }
 
 void FingerDown(SDL_FingerID id, float x, float y) {
@@ -949,8 +968,8 @@ void FingerDown(SDL_FingerID id, float x, float y) {
         f.role = Role::Stick;
         // fixed: pushed from its own centre, at once wherever the thumb came down
         if (g_fixed_stick) {
-            f.x0 = g_layout[kStick].x * Width();
-            f.y0 = g_layout[kStick].y * Height();
+            f.x0 = LayoutX(kStick);
+            f.y0 = LayoutY(kStick);
             UpdateStick(f);
         }
     } else {
@@ -1012,8 +1031,8 @@ void FingerMove(SDL_FingerID id, float x, float y) {
         f.y = y;
         if (f.role == Role::Drag) {
             Place& p = g_layout[f.button];
-            p.x = std::clamp((x - f.x0) / Width(), 0.0f, 1.0f);
-            p.y = std::clamp((y - f.y0) / Height(), 0.0f, 1.0f);
+            p.x = std::clamp((x - f.x0) / SafeW(), 0.0f, 1.0f);
+            p.y = std::clamp((y - f.y0) / SafeH(), 0.0f, 1.0f);
         }
         // a pinch sizes the control by the span between its two fingers, whichever moved
         if (f.role == Role::Drag || f.role == Role::Pinch) {
@@ -1417,7 +1436,7 @@ void SkinImage(ImDrawList* dl, SkinPart part, ImVec2 c, float r, ImU32 tint) {
 void DrawStick(ImDrawList* dl, float th) {
     // at rest in its place, else where the thumb came down (its place too, when fixed)
     float r = Radius(kStick);
-    ImVec2 at(g_layout[kStick].x * Width(), g_layout[kStick].y * Height());
+    ImVec2 at(LayoutX(kStick), LayoutY(kStick));
     bool held = false;
     for (const Finger& f : g_fingers)
         if (f.role == Role::Stick) {
@@ -1527,7 +1546,7 @@ void Draw() {
     if (editing || (!InMenus() && !app::MenuOpen() && input::Play())) DrawStick(dl, th);
     if (editing) {
         if (g_selected == int(kStick)) {
-            ImVec2 at(g_layout[kStick].x * Width(), g_layout[kStick].y * h);
+            ImVec2 at(LayoutX(kStick), LayoutY(kStick));
             dl->AddCircle(at, Radius(kStick) + th * 2, IM_COL32(255, 200, 60, 255), 64, th * 1.5f);
         }
         DrawEditorBar(dl, th);
@@ -1683,6 +1702,7 @@ bool Firing() {
 // main thread, each turn of the event loop: the on-screen keyboard while a name is typed
 void Pump() {
     gyro::Pump();
+    UpdateSafeArea();
     // a mouse in play is captured as on a PC: no pointer over the picture and no screen edge to stop a turn. Let go
     // in the menus, the panel, the background and once the touch screen is used; asked again whenever Android took
     // it away

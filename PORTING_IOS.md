@@ -141,6 +141,32 @@ an indirect one and its fingers are ignored); always on Android and iOS.
 - The UIScene lifecycle, `UIFileSharingEnabled`, safe area, and an `.app` bundle target (the Mac target is a bare executable).
 - `RedirectLog` has an os_log branch for iOS that is written but has never run.
 
+## Phase 3: iOS (in progress)
+
+Build (no signing needed to compile): `scripts/fetch-deps.sh && scripts/fetch-deps.sh ios`, then
+`cmake -S . -B out/build/ios -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 -DBLACK_VERBOSE_LOG=ON`
+and `cmake --build out/build/ios --config Release --target main` (first build ~15 min; configure ~6 min for the fetches).
+Result `out/build/ios/Release-iphoneos/Black.app`: arm64, platform iOS, minos 16.0, no dylibs besides system ones,
+`vkGetInstanceProcAddr` exported (SDL finds the linked-in MoltenVK with `dlsym`). Then
+`scripts/sign-ios.sh` (needs `ios/profiles/black.mobileprovision`, Ad Hoc, app id `TEAMID.com.example.black`;
+signs increased-memory-limit only, `WITH_EVA=1` adds extended-virtual-addressing) and `scripts/install-ios.sh install|run|game <iso>|logs`.
+
+- MoltenVK: the official v1.4.2 `MoltenVK-ios.tar` (sha256 pinned in fetch-deps.sh): a device-only `ios-arm64` static lib, no
+  simulator slice, so the app only runs on the phone.
+- UIScene: SDL 3.4.16 has `SDLUIKitSceneDelegate`; `ios/Info.plist.in` declares it in `UIApplicationSceneManifest`.
+  Not yet seen working on the device.
+- Info.plist: landscape only, status bar hidden, `UIFileSharingEnabled` + `LSSupportsOpeningDocumentsInPlace`
+  (Documents/Black in Files), `UIRequiredDeviceCapabilities` arm64 + metal.
+- Home indicator: `SDL_HINT_IOS_HIDE_HOME_INDICATOR=2` (dim; the first swipe shows it, the second goes home).
+- Lifecycle: on iOS the foreground flag is flipped from an SDL event watch (synchronously in the delegate callback), not
+  only from the event loop. Nothing else changed for Android. **Untested on device**; whether MoltenVK survives a
+  background/foreground cycle (command buffers committed while backgrounded fail on iOS) is an open question.
+- Touch layout: shares are now of the safe area (`platform::SafeAreaPixels`, SDL_GetWindowSafeArea on iOS, the whole
+  window on Android and the Mac). Untested on device.
+- Game files: Documents/Black (then Documents), `scripts/install-ios.sh game <iso>` copies an ISO there with devicectl.
+  Settings, saves, logs and the shader cache are in the app's Application Support (`SDL_GetPrefPath`); logs go to os_log
+  (subsystem com.muhammad.black) as well. Both unverified.
+
 ## Decisions
 
 - Full 4 GB guest layout (approved after Phase 0). No smaller layout needed.

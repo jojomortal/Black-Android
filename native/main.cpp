@@ -49,6 +49,7 @@ std::string Utf8(const wchar_t* w) {
 void SetForeground(bool on) {
     {
         std::lock_guard lock(g_foreground_lock);
+        if (g_foreground == on) return;  // the watch and the event loop both say so
         if (on && !g_foreground) g_surface_epoch++;
         g_foreground = on;
     }
@@ -319,6 +320,7 @@ int main(int, char**) {
         std::fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
     }
+    platform::WatchLifecycle(SetForeground);
     logx::Init((app::ExeDir() / "logs").string(), app::kGame.log);
     app::Load();
     if (app::kGame.init) app::kGame.init();
