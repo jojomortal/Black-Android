@@ -219,3 +219,12 @@ The audio session is `SoloAmbient` until SDL opens the device, then `Playback`.
 
 - Signing decided: the Apple Distribution identity of the developer account, manual, Ad Hoc profiles. iPhone UDID `<device UDID>` (devicectl: paired, available).
 - Dev portal (done): one App ID `com.muhammad.memtest` with both capabilities + one Ad Hoc profile; variants sign a subset of what the profile grants.
+
+## HD textures (BLACK HD Reimagined)
+
+Step 1 (key match, Mac). `native/hd_textures.cpp` computes the map's key (FNV-1a 64 over the top level's guest bytes as
+64-bit words; P8/DXT1/DXT3/DXT5, swizzled, 2D, >= 16x16) when `BindGuestTexture` is about to upload a texture, and
+logs hits and misses every 5 s. Off unless `BLACK_HD_MAP=<map>` is set; `BLACK_HD_MISSES=1` logs each miss.
+- The SDK's format ids (`gpu/texture.cpp`: P8 0x0B, DXT1 0x0C, DXT3 0x0E, DXT5 0x0F) equal the map's format column; no conversion.
+- Map: `textures/black-hd-reimagined.map` from portingpete/Black-2006-Recomp (MIT, licence copied beside it). Pack files are never committed.
+- Result so far: title and menus only (DXT5 3/3 hit, DXT3 0/2); the first mission is not measured yet.
