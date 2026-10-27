@@ -186,9 +186,16 @@ Verified from the device log (`scripts/install-ios.sh run` then `logs`; per-seco
 - Player reports (not in the log): the picture, the DS4 controller and the sound during play were fine, and the sound
   was fine after returning from that background.
 
+- Saves persist: saved, force-quit, relaunched, the save was there (player report).
+- Edge swipes: Control Center pulled from the top and the home / app-switcher swipe from the bottom no longer act on the
+  game (player report, after the fixes below). Cause: SDL defers every edge for `SDL_HINT_IOS_HIDE_HOME_INDICATOR=2`, so
+  the first swipe of an edge reaches the app; and `SDL_EVENT_FINGER_CANCELED` was handled as a finger-up, which is a tap.
+  Now: a cancelled finger is dropped without a tap, every finger is dropped on background/foreground/focus changes
+  (`touch::ReleaseAll`), and touches that begin in a 20 pt top / 24 pt bottom margin (`platform::TouchMarginsPixels`, iOS
+  only) are ignored unless they hit a control. A real tap in the bottom 24 pt on a menu is ignored too.
+
 Not yet verified: a background much longer than 4 minutes (iOS may kill a suspended app after a while or under memory
-pressure), whether Control Center specifically was one of the
-two short interruptions, the safe-area layout, saves persisting across launches, Europe disc, the EasySMX M15 controller.
+pressure), the safe-area layout, the Europe disc, the EasySMX M15 controller.
 The audio session is `SoloAmbient` until SDL opens the device, then `Playback`.
 
 ## Decisions
