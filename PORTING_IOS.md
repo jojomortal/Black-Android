@@ -181,10 +181,10 @@ Verified from the device log (`scripts/install-ios.sh run` then `logs`; per-seco
 - Background/foreground: every return resumed (`focus back: resumed`, new surface and swap chain, ~61 fps next second),
   for short interruptions (1.7 s and 2.8 s, no `did enter background`, Control Center or the app switcher) and for real
   backgrounds up to 108 s in an earlier run. SDL maps the resign-active step to `will enter background`.
-- Player reports (not in the log): the picture, the DS4 controller and the sound, also after returning from the
-  background, were fine.
+- Player reports (not in the log): the picture, the DS4 controller and the sound during play were fine. Sound after
+  returning from a background has **not** been reported on yet.
 
-Not yet verified: a ~5 minute background (resumed or killed by iOS), whether Control Center specifically was one of the
+Not yet verified: audio after a return from the background, a ~5 minute background (resumed or killed by iOS), whether Control Center specifically was one of the
 two short interruptions, the safe-area layout, saves persisting across launches, Europe disc, the EasySMX M15 controller.
 The audio session is `SoloAmbient` until SDL opens the device, then `Playback`.
 
