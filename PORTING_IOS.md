@@ -47,11 +47,24 @@ SDK checkout: `../XboxXBE-Recomp` at `99078b1` (picked up by CMake before FetchC
 - `Commit`: `mprotect` rounded out to host pages (`sysconf(_SC_PAGESIZE)`).
 - `Decommit`: clears the 4 KB bits, then releases only host pages with no committed guest page, by remapping them
   `MAP_FIXED|MAP_ANON|MAP_NORESERVE` `PROT_NONE` (zeroes). Neighbours stay.
+- A reserve failure logs errno, the kern_return of the step that failed and the largest reservation that works.
 - Windows and the generic Unix/Android path are unchanged. Tested on macOS with the real memory.cpp (aliasing, odd
   4 KB commits, neighbour survives, release faults, recommit reads zero). Not yet run on the phone inside the game.
 - Side effect: the guest cannot have a guard smaller than 16 KB; `AllocStack`'s 64 KB guard is fine.
 - Apply to a sibling checkout with `git -C ../XboxXBE-Recomp apply ../Black-Android/patches/sdk/0001-memory-darwin.patch`;
   CMake wiring for the FetchContent case comes in Phase 2.
+
+## Decisions
+
+- Full 4 GB guest layout (approved after Phase 0). No smaller layout needed.
+- Real app bundle ID `com.muhammad.black`. Its App ID gets Increased Memory Limit **and** Extended Virtual Addressing
+  in the portal, with an Ad Hoc profile; the build signs **only** `increased-memory-limit`. EVA is the fallback to
+  sign in if the reservation ever fails inside the full app (large binary + MoltenVK use address space the spike did not).
+- iOS 27 requires the UIScene lifecycle (see above); the real app's Info.plist needs `UIApplicationSceneManifest`.
+- Aliasing: memory entry + `vm_map`; `shm_open` is not available on iOS.
+- Signing: the Apple Distribution identity of the developer account, manual, Ad Hoc. iPhone UDID `<device UDID>`.
+- Game files for Mac testing: `iso/` symlink to `<the USA disc image>`; the USA
+  `assets/default.xbe` has SHA1 `c5bfed25449c8212d7a976f15246e87ead57713f`. Nothing under iso/, assets/, generated/ is committed.
 
 ## Open questions
 
