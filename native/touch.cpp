@@ -1053,6 +1053,33 @@ void FingerMove(SDL_FingerID id, float x, float y) {
     }
 }
 
+// fingers whose touch began in the top margin: theirs is the system's, the game never sees them
+std::vector<SDL_FingerID> g_ignored;
+
+// a touch the system took (Control Center, a notification, the app switcher): dropped as it is, never a tap, a scroll
+// or a button. The finger is gone, so its effects go with it
+void FingerCancel(SDL_FingerID id) {
+    LOGI("touch: finger cancelled by the system, no tap");
+    for (const Finger& f : g_fingers)
+        if (f.id == id && f.role == Role::Cursor && f.menu != MenuTouch::Scroll) g_cursor_down = false;
+    std::erase_if(g_fingers, [id](const Finger& f) { return f.id == id; });
+    Recount();
+}
+
+// every touch in progress dropped, as when the app is not in front: no finger is left holding a button, the stick, the
+// cursor or a drag, and nothing pending becomes a click when the app comes back
+void ReleaseAll() {
+    if (!g_fingers.empty() || !g_ignored.empty()) LOGI("touch: %zu fingers dropped (focus change)", g_fingers.size() + g_ignored.size());
+    g_fingers.clear();
+    g_ignored.clear();
+    g_cursor_down = false;
+    g_cursor_tap_until = 0;
+    g_stick_x = g_stick_y = 0;
+    input::g_touch_dx = input::g_touch_dy = 0;
+    input::g_wheel = 0;
+    Recount();
+}
+
 void FingerUp(SDL_FingerID id) {
     for (const Finger& f : g_fingers) {
         if (f.id != id || f.role != Role::Cursor) continue;
@@ -1143,6 +1170,17 @@ bool OnEvent(const SDL_Event& e) {
                 if (input::Active() && !input::Play() && !input::KeyCaptureUp()) input::g_wheel += notch;
             }
             return !app::MenuOpen();
+        // the app is not in front (or the window lost the focus): the system has the touches, the ones in progress end
+        // here, and no finger is left over when it comes back
+        case SDL_EVENT_WILL_ENTER_BACKGROUND:
+        case SDL_EVENT_DID_ENTER_BACKGROUND:
+        case SDL_EVENT_WINDOW_FOCUS_LOST:
+        case SDL_EVENT_DID_ENTER_FOREGROUND:
+        case SDL_EVENT_WINDOW_FOCUS_GAINED: {
+            std::lock_guard lock(g_lock);
+            ReleaseAll();
+            return false;
+        }
         case SDL_EVENT_FINGER_DOWN:
         case SDL_EVENT_FINGER_MOTION:
         case SDL_EVENT_FINGER_UP:
@@ -1153,6 +1191,14 @@ bool OnEvent(const SDL_Event& e) {
             std::lock_guard lock(g_lock);
             EnsureLayout();
             if (e.type == SDL_EVENT_FINGER_DOWN) {
+                // a touch that begins in the top margin is the system's pull (Control Center), not a tap: kept from the
+                // game, but for a control drawn there
+                if (!g_editing && y < platform::TouchTopMarginPixels(host::Window()) && HitButton(x, y) == kButtonCount) {
+                    LOGI("touch: finger began in the top margin (y %.0f of %.0f): the system's", double(y),
+                         double(platform::TouchTopMarginPixels(host::Window())));
+                    g_ignored.push_back(e.tfinger.fingerID);
+                    return true;
+                }
                 // the settings panel takes the touches, but for the button that closes it
                 if (app::MenuOpen() && !g_editing) {
                     size_t b = HitButton(x, y);
@@ -1161,10 +1207,16 @@ bool OnEvent(const SDL_Event& e) {
                 FingerDown(e.tfinger.fingerID, x, y);
                 return true;
             }
+            auto ignored = std::find(g_ignored.begin(), g_ignored.end(), e.tfinger.fingerID);
+            if (ignored != g_ignored.end()) {
+                if (e.type != SDL_EVENT_FINGER_MOTION) g_ignored.erase(ignored);
+                return true;
+            }
             bool ours = std::any_of(g_fingers.begin(), g_fingers.end(),
                                     [&](const Finger& f) { return f.id == e.tfinger.fingerID; });
             if (!ours) return false;
             if (e.type == SDL_EVENT_FINGER_MOTION) FingerMove(e.tfinger.fingerID, x, y);
+            else if (e.type == SDL_EVENT_FINGER_CANCELED) FingerCancel(e.tfinger.fingerID);
             else FingerUp(e.tfinger.fingerID);
             return true;
         }

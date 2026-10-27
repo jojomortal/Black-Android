@@ -271,6 +271,16 @@ void SafeAreaPixels(SDL_Window* window, float& x, float& y, float& w, float& h) 
 #endif
 }
 
+float TouchTopMarginPixels(SDL_Window* window) {
+#if TARGET_OS_IPHONE
+    // about 20 points, the strip the status bar and the Dynamic Island's side sit in
+    return window ? 20.0f * SDL_GetWindowPixelDensity(window) : 0.0f;
+#else
+    (void)window;
+    return 0;
+#endif
+}
+
 // a Mac has no touch screen, but its trackpad reports fingers to SDL as an indirect touch device
 bool TouchControls() {
 #if TARGET_OS_IPHONE
