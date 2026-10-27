@@ -35,3 +35,4 @@ black.toml
 
 # Local temporary folder
 .local
+spike/memtest/build/
