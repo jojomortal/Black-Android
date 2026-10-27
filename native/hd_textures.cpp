@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "core/log.h"
+#include "platform.h"
 
 namespace hd {
 namespace {
@@ -65,13 +66,14 @@ void Report() {
 bool Enabled() {
     if (g_loaded) return g_on;
     g_loaded = true;
-    const char* path = std::getenv("BLACK_HD_MAP");
-    if (!path || !*path) return false;
+    // BLACK_HD_MAP, else the map shipped beside the executable (the app bundle's resources on iOS)
+    std::string path;
+    if (const char* env = std::getenv("BLACK_HD_MAP")) path = env;
+    if (path.empty()) path = platform::AssetPath("textures/black-hd-reimagined.map").string();
     std::ifstream in(path);
-    if (!in) {
-        LOGE("hd: cannot open the map %s", path);
-        return false;
-    }
+    if (!in && std::getenv("BLACK_HD_MAP")) LOGE("hd: cannot open the map %s", path.c_str());
+    if (!in) return false;
+    LOGI("hd: reading the map %s", path.c_str());
     std::string line;
     while (std::getline(in, line)) {
         if (line.empty() || line[0] == '#') continue;
@@ -86,7 +88,7 @@ bool Enabled() {
         g_map_lines++;
     }
     g_on = g_map_lines > 0;
-    LOGI("hd: map %s: %zu textures", path, g_map_lines);
+    LOGI("hd: map: %zu textures", g_map_lines);
     return g_on;
 }
 
@@ -115,7 +117,7 @@ void Note(const gpu::TextureDesc& d, const gpu::FormatInfo& fi, const uint8_t* g
         if (found) {
             g_st.hit[slot]++;
             g_st.keys_hit.insert(key);
-        } else if (std::getenv("BLACK_HD_MISSES")) {
+        } else {
             LOGI("hd: miss %016llx %ux%u fmt %02x levels %u", (unsigned long long)key, d.width, d.height, d.format,
                  d.levels);
         }

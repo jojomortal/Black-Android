@@ -134,7 +134,10 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     # the app icon: 1024 px, from the cover art the project already uses, compiled by actool
     set(ICON_CATALOG ${REPO}/ios/Assets.xcassets)
     set_source_files_properties(${ICON_CATALOG} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
-    add_executable(main MACOSX_BUNDLE ${MAIN_SOURCES} ${SKIN_PNG} ${ICON_CATALOG})
+    # the HD texture map, read from the bundle
+    set(HD_MAP ${REPO}/textures/black-hd-reimagined.map)
+    set_source_files_properties(${HD_MAP} PROPERTIES MACOSX_PACKAGE_LOCATION textures)
+    add_executable(main MACOSX_BUNDLE ${MAIN_SOURCES} ${SKIN_PNG} ${ICON_CATALOG} ${HD_MAP})
     set_target_properties(main PROPERTIES
         OUTPUT_NAME Black
         MACOSX_BUNDLE_INFO_PLIST ${REPO}/ios/Info.plist.in
@@ -203,5 +206,7 @@ else()
         # the touch controls' skin next to the executable
         add_custom_command(TARGET main POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory
                            ${REPO}/app/src/main/assets/skins $<TARGET_FILE_DIR:main>/skins)
+        add_custom_command(TARGET main POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy
+                           ${REPO}/textures/black-hd-reimagined.map $<TARGET_FILE_DIR:main>/textures/black-hd-reimagined.map)
     endif()
 endif()
