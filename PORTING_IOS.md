@@ -167,6 +167,27 @@ signs increased-memory-limit only, `WITH_EVA=1` adds extended-virtual-addressing
   Settings, saves, logs and the shader cache are in the app's Application Support (`SDL_GetPrefPath`); logs go to os_log
   (subsystem com.muhammad.black) as well. Both unverified.
 
+### iPhone 15 (A16, iOS 27.0.1) results so far
+
+Verified from the device log (`scripts/install-ios.sh run` then `logs`; per-second lines need `BLACK_DEBUG_PRESENT=1`, which
+`run` sets, as `BLACK_DEBUG_INPUT=1`):
+- Boots from `Documents/Black/Black (USA).iso` (sha1 matches), title screen at 4.1 s, 4087 MB available to the app
+  (Increased Memory Limit only, signed by `scripts/sign-ios.sh`). **The 4 GB guest reservation succeeded** at
+  `0x7000000000`; Extended Virtual Addressing was not needed.
+- A16 GPU through MoltenVK 1.4.2: Vulkan 1.3, D32S8 depth, FIFO present at 60 Hz (MAILBOX/IMMEDIATE not offered),
+  missing portability features `samplerMipLodBias` and `pointPolygons`, BC textures decoded on the CPU.
+- ~18 min of play: 1053 reported seconds, median 61 fps, none with a non-zero acquire/present result, no timeout, no
+  device-lost, no guest trap, no low-memory warning. BC decode in all: 2172 levels, 32.3 MB, 15.9 ms.
+- Background/foreground: every return resumed (`focus back: resumed`, new surface and swap chain, ~61 fps next second),
+  for short interruptions (1.7 s and 2.8 s, no `did enter background`, Control Center or the app switcher) and for real
+  backgrounds up to 108 s in an earlier run. SDL maps the resign-active step to `will enter background`.
+- Player reports (not in the log): the picture, the DS4 controller and the sound, also after returning from the
+  background, were fine.
+
+Not yet verified: a ~5 minute background (resumed or killed by iOS), whether Control Center specifically was one of the
+two short interruptions, the safe-area layout, saves persisting across launches, Europe disc, the EasySMX M15 controller.
+The audio session is `SoloAmbient` until SDL opens the device, then `Playback`.
+
 ## Decisions
 
 - Full 4 GB guest layout (approved after Phase 0). No smaller layout needed.
