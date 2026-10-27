@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_vulkan.h>
 
 #include <cstdlib>
 #include <string>
@@ -115,6 +116,47 @@ void LogDevice() {
     LOGR("Device: %s, macOS %s", Sysctl("hw.model").c_str(), Sysctl("kern.osproductversion").c_str());
 #endif
     LOGR("CPU: %s (%d threads)", Sysctl("machdep.cpu.brand_string").c_str(), SDL_GetNumLogicalCPUCores());
+}
+
+namespace {
+
+struct SurfaceJob {
+    SDL_Window* window;
+    VkInstance instance;
+    VkSurfaceKHR* surface;
+    bool ok;
+};
+
+void SDLCALL MakeSurface(void* p) {
+    auto* j = static_cast<SurfaceJob*>(p);
+    j->ok = SDL_Vulkan_CreateSurface(j->window, j->instance, nullptr, j->surface);
+}
+
+struct DestroyJob {
+    VkInstance instance;
+    VkSurfaceKHR surface;
+};
+
+void SDLCALL DropSurface(void* p) {
+    auto* j = static_cast<DestroyJob*>(p);
+    vkDestroySurfaceKHR(j->instance, j->surface, nullptr);
+}
+
+}  // namespace
+
+// the main thread's event loop runs the job; the caller waits. Measured with spike/vkpresent: from another thread the
+// window stays black
+bool CreateVulkanSurface(SDL_Window* window, VkInstance instance, VkSurfaceKHR* surface) {
+    SurfaceJob job{window, instance, surface, false};
+    if (SDL_IsMainThread()) MakeSurface(&job);
+    else if (!SDL_RunOnMainThread(MakeSurface, &job, true)) return false;
+    return job.ok;
+}
+
+void DestroyVulkanSurface(VkInstance instance, VkSurfaceKHR surface) {
+    DestroyJob job{instance, surface};
+    if (SDL_IsMainThread()) DropSurface(&job);
+    else SDL_RunOnMainThread(DropSurface, &job, true);
 }
 
 bool SurfaceReady(SDL_Window* window) { return window != nullptr; }

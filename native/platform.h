@@ -1,5 +1,7 @@
 #pragma once
 // What differs between the hosts the parts of native/ run on: platform_android.cpp and platform_apple.cpp (macOS, iOS)
+#include <vulkan/vulkan.h>
+
 #include <filesystem>
 #include <vector>
 
@@ -23,6 +25,10 @@ std::vector<std::filesystem::path> GameFolders();
 void LogGameMissing();
 // the device, CPU and RAM lines of the log's header
 void LogDevice();
+// the Vulkan surface of the window, from any thread: macOS makes the window's Metal view on the main thread only, where
+// a surface made on another shows nothing (black, no error anywhere)
+bool CreateVulkanSurface(SDL_Window* window, VkInstance instance, VkSurfaceKHR* surface);
+void DestroyVulkanSurface(VkInstance instance, VkSurfaceKHR surface);
 // SDL may make the Vulkan surface now (Android hands the window over late and takes it away again)
 bool SurfaceReady(SDL_Window* window);
 // a file shipped with the app (the touch controls' skin), as a path SDL can open

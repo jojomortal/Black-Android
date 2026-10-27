@@ -88,6 +88,28 @@ Needs `brew install molten-vk vulkan-headers` (Homebrew's MoltenVK is a macOS st
   while it runs (`vulkan: DXT decoded on the CPU: N levels, X MB, T ms in all, U ms in the last S s`). At the title screen
   it was 0.2 ms over 10 s: **not representative**, measure in a mission before judging A16.
 
+### Black window on the Mac: found and fixed
+
+Cause: the Vulkan surface was made on the render thread. macOS makes the window's Metal view (SDL's
+`SDL3_cocoametalview`) on the main thread only; from another thread everything succeeds (acquire, submit, present all
+return success at 120 Hz, MoltenVK and the Metal validation layer say nothing) and the window stays black.
+Fix: `platform::CreateVulkanSurface` runs `SDL_Vulkan_CreateSurface` on the main thread through `SDL_RunOnMainThread`
+(Android calls SDL directly, unchanged); the swap chain and the presents stay on the render thread. The main thread's
+event loop services the call, no deadlock at start up.
+
+How it was found (all in `spike/vkpresent`, a 200 line SDL + MoltenVK presenter that clears to magenta; fullscreen runs,
+magenta share of a screenshot): everything on main 97%, surface+swap chain+present on a worker **0%**, surface on main and
+the rest on a worker 97%. The game's own `BLACK_DEBUG_CLEAR=1` (magenta, game drawing skipped) was black before the fix
+and 96% magenta after. `BLACK_DEBUG_PRESENT=1` prints a once-a-second report of presents, acquire/present results,
+swap chain extent and window points/pixels (x2 on Retina).
+Steps not needed after that: the Vulkan validation layers were not run (not installed); Metal API validation
+(`MTL_DEBUG_LAYER=1`) ran clean. For a Metal frame capture, if ever needed: run with `MTL_CAPTURE_ENABLED=1` from a
+terminal, then Xcode > Debug > Attach to Process > black, and the camera button in the debug bar, or launch the binary
+from an Xcode scheme and use Capture GPU Workload.
+Windowed mode could not be checked reliably by screenshot (the window kept ending up where the capture did not see it,
+also for the plain main-thread presenter): **please look at windowed mode** (`display_mode = 'windowed'` in
+`out/run-data/black.toml`).
+
 ### Verified on the Mac (M1 Pro, macOS 26.7.1)
 
 - Boots from the ISO, SHA1 matches, no unresolved kernel imports, guest space reserved through the patched `memory.cpp`,
@@ -97,8 +119,8 @@ Needs `brew install molten-vk vulkan-headers` (Homebrew's MoltenVK is a macOS st
 
 ### NOT verified
 
-- **What is on screen.** A screenshot came back black (missing Screen Recording permission for the terminal, or a black
-  window: I cannot tell). Please look at the window.
+- What is on screen: it was a black window, see above; after the fix screenshots show the Criterion and EA logos and the
+  touch overlay (START and a gear: the Mac draws the touch controls too).
 - Sound heard, a controller, touch/keyboard/mouse input, the options menu with the update row hidden, anything past the
   title screen, saves, dynamic resolution, the Europe disc path (`europe.patch` embed was only compiled).
 - No `x86_trap` fired in 60 s of the title screen; deeper play is untested.

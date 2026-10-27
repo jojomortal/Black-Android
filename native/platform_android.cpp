@@ -10,6 +10,7 @@
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_system.h>
+#include <SDL3/SDL_vulkan.h>
 
 #include <algorithm>
 #include <cmath>
@@ -142,6 +143,12 @@ void LogDevice() {
          Property("ro.product.model").c_str(), Property("ro.build.version.release").c_str(), SDL_GetAndroidSDKVersion());
     LOGR("CPU: %s (%d threads)", Property("ro.soc.model").c_str(), SDL_GetNumLogicalCPUCores());
 }
+
+bool CreateVulkanSurface(SDL_Window* window, VkInstance instance, VkSurfaceKHR* surface) {
+    return SDL_Vulkan_CreateSurface(window, instance, nullptr, surface);
+}
+
+void DestroyVulkanSurface(VkInstance instance, VkSurfaceKHR surface) { vkDestroySurfaceKHR(instance, surface, nullptr); }
 
 // Android has not handed the window back yet (resuming, or a surface change)
 bool SurfaceReady(SDL_Window* window) {

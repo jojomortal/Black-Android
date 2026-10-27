@@ -331,6 +331,11 @@ int main(int, char**) {
         return 1;
     }
 
+    int win_w = 0, win_h = 0;
+    SDL_GetWindowSize(g_window, &win_w, &win_h);
+    LOGR("app: window %dx%d points, pixel density %.2f, made on the %s", win_w, win_h, SDL_GetWindowPixelDensity(g_window),
+         SDL_IsMainThread() ? "main thread" : "worker thread");
+
     app::GameFiles game;
     if (!app::FindGame(game)) {
         logx::Flush();

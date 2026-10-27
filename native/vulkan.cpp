@@ -347,6 +347,29 @@ void ColourBlock(const uint8_t* b, bool dxt1, uint8_t* out) {
     for (int i = 0; i < 16; i++) std::memcpy(out + i * 4, pal[(bits >> (i * 2)) & 3], 4);
 }
 
+// which thread a call is on: macOS wants the window system's work on the main thread, Android did not care
+const char* ThreadKind() { return SDL_IsMainThread() ? "main thread" : "worker thread"; }
+
+// BLACK_DEBUG_CLEAR=1: the swap chain image is cleared to magenta and the game's frame not drawn, to tell a surface that
+// shows nothing from a frame that draws nothing
+bool DebugClear() {
+    static const bool on = [] {
+        const char* v = std::getenv("BLACK_DEBUG_CLEAR");
+        return v && *v && *v != '0';
+    }();
+    return on;
+}
+
+// what the presents did in the last second, logged once a second
+struct PresentStats {
+    uint32_t presented = 0, dropped = 0;
+    uint32_t acquire_suboptimal = 0, acquire_out_of_date = 0, acquire_timeout = 0, acquire_other = 0;
+    uint32_t present_suboptimal = 0, present_out_of_date = 0, present_other = 0;
+    VkResult last_acquire = VK_SUCCESS, last_present = VK_SUCCESS;
+    std::chrono::steady_clock::time_point since = std::chrono::steady_clock::now();
+};
+PresentStats g_ps;
+
 // what the CPU decode costs, logged every few seconds it runs: the vulkan thread's own, no lock
 void NoteDxtDecode(std::chrono::steady_clock::duration took, size_t out_bytes) {
     using clock = std::chrono::steady_clock;
@@ -1156,6 +1179,7 @@ private:
     // present
     bool AcquireImage(uint32_t& index);
     void DrawFrame(Target* t, uint32_t index);
+    void ReportPresents();
     void RenderUi();
     void UploadGammaRamp();
     void UploadSkin();
@@ -1284,6 +1308,7 @@ bool VulkanBackend::Init(uint32_t width, uint32_t height) {
 }
 
 bool VulkanBackend::CreateInstance() {
+    LOGR("vulkan: instance, device and swap chain are made on the %s", ThreadKind());
     uint32_t n = 0;
     const char* const* sdl = SDL_Vulkan_GetInstanceExtensions(&n);
     std::vector<const char*> exts(sdl, sdl + n);
@@ -1311,11 +1336,12 @@ bool VulkanBackend::CreateSurface() {
         if (surface_failures_++ == 0) LOGI("vulkan: waiting for the window");
         return false;
     }
-    if (!SDL_Vulkan_CreateSurface(host::Window(), instance_, nullptr, &surface_)) {
+    if (!platform::CreateVulkanSurface(host::Window(), instance_, &surface_)) {
         surface_ = VK_NULL_HANDLE;
         if (surface_failures_++ == 0) LOGE("vulkan: no surface: %s", SDL_GetError());
         return false;
     }
+    LOGR("vulkan: surface asked for on the %s", ThreadKind());
     if (surface_failures_) LOGI("vulkan: surface made after %u tries", surface_failures_ + 1);
     surface_failures_ = 0;
     surface_epoch_ = epoch;
@@ -1555,7 +1581,9 @@ bool VulkanBackend::CreateSwapchain() {
         swap_done_.push_back(s);
     }
     swap_stale_ = false;
-    LOGI("vulkan: swap chain %ux%u, %u images, %s", w, h, count, vsync_ ? "vsync" : "no vsync");
+    LOGR("vulkan: swap chain %ux%u (the surface says %ux%u), %u images, format %d colour space %d, present mode %d, %s, on the %s",
+         w, h, caps.currentExtent.width, caps.currentExtent.height, count, int(chosen.format), int(chosen.colorSpace),
+         int(mode), vsync_ ? "vsync" : "no vsync", ThreadKind());
     return true;
 }
 
@@ -3156,7 +3184,7 @@ bool VulkanBackend::AcquireImage(uint32_t& index) {
     if (!surface_ || surface_lost_ || host::SurfaceEpoch() != surface_epoch_) {
         if (surface_) LOGI("vulkan: new surface (%s)", surface_lost_ ? "lost" : "new window");
         DestroySwapchain();
-        if (surface_) vkDestroySurfaceKHR(instance_, surface_, nullptr);
+        if (surface_) platform::DestroyVulkanSurface(instance_, surface_);
         surface_ = VK_NULL_HANDLE;
         if (!CreateSurface()) return false;
         swap_stale_ = true;
@@ -3171,6 +3199,11 @@ bool VulkanBackend::AcquireImage(uint32_t& index) {
     constexpr uint64_t kAcquireTimeout = 500'000'000;
     for (int tries = 0; tries < 2; tries++) {
         VkResult r = vkAcquireNextImageKHR(dev_, swap_, kAcquireTimeout, CurrentFrame().acquire, VK_NULL_HANDLE, &index);
+        g_ps.last_acquire = r;
+        if (r == VK_SUBOPTIMAL_KHR) g_ps.acquire_suboptimal++;
+        else if (r == VK_ERROR_OUT_OF_DATE_KHR) g_ps.acquire_out_of_date++;
+        else if (r == VK_TIMEOUT || r == VK_NOT_READY) g_ps.acquire_timeout++;
+        else if (r != VK_SUCCESS) g_ps.acquire_other++;
         // suboptimal is left alone: Android says so every frame on a turned screen, where only the compositor's
         // rotation differs, and making the chain again each frame freed images the GPU was still drawing (Mali)
         if (r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR) return true;
@@ -3233,7 +3266,7 @@ void VulkanBackend::DrawFrame(Target* t, uint32_t index) {
     Alloc cbuf = Constants(c, sizeof(c));
     const char* hlsl = filter || post ? kFilterHlsl : kBlitHlsl;
     const char* entry = crt ? "pscrt" : filter == 3 ? "pssharpen" : filter ? "pscolor" : post ? "psplain" : "psmain";
-    VkPipeline pipe = t ? FullScreenPipeline(hlsl, entry, swap_fmt_, VK_FORMAT_UNDEFINED, false) : VK_NULL_HANDLE;
+    VkPipeline pipe = t && !DebugClear() ? FullScreenPipeline(hlsl, entry, swap_fmt_, VK_FORMAT_UNDEFINED, false) : VK_NULL_HANDLE;
     VkDescriptorSet set = VK_NULL_HANDLE;
     if (pipe) {
         Transition(t->img, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -3247,7 +3280,7 @@ void VulkanBackend::DrawFrame(Target* t, uint32_t index) {
     ca.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     ca.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     ca.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    ca.clearValue.color = {{0, 0, 0, 1}};
+    ca.clearValue.color = DebugClear() ? VkClearColorValue{{1, 0, 1, 1}} : VkClearColorValue{{0, 0, 0, 1}};
     VkRenderingInfoKHR ri{VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
     ri.renderArea = {{0, 0}, swap_extent_};
     ri.layerCount = 1;
@@ -3283,6 +3316,34 @@ void VulkanBackend::DrawFrame(Target* t, uint32_t index) {
     b.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0,
                          nullptr, 0, nullptr, 1, &b);
+}
+
+// once a second: what the swap chain and the window look like and how the presents went
+void VulkanBackend::ReportPresents() {
+    // BLACK_DEBUG_PRESENT=1 (or the clear test): a line a second is too much for a release log
+    static const bool on = [] {
+        const char* v = std::getenv("BLACK_DEBUG_PRESENT");
+        return DebugClear() || (v && *v && *v != '0');
+    }();
+    if (!on) return;
+    auto now = std::chrono::steady_clock::now();
+    double el = std::chrono::duration<double>(now - g_ps.since).count();
+    if (el < 1.0) return;
+    int pw = 0, ph = 0, w = 0, h = 0;
+    SDL_Window* win = host::Window();
+    if (win) {
+        SDL_GetWindowSize(win, &w, &h);
+        SDL_GetWindowSizeInPixels(win, &pw, &ph);
+    }
+    LOGR("vulkan: %.1f s: %u presented (%u dropped), acquire last %d [suboptimal %u, out of date %u, timeout %u, other %u], "
+         "present last %d [suboptimal %u, out of date %u, other %u], swap chain %ux%u format %d, window %dx%d points "
+         "%dx%d pixels (x%.2f), %s",
+         el, g_ps.presented, g_ps.dropped, int(g_ps.last_acquire), g_ps.acquire_suboptimal, g_ps.acquire_out_of_date,
+         g_ps.acquire_timeout, g_ps.acquire_other, int(g_ps.last_present), g_ps.present_suboptimal,
+         g_ps.present_out_of_date, g_ps.present_other, swap_extent_.width, swap_extent_.height, int(swap_fmt_), w, h, pw,
+         ph, win ? SDL_GetWindowPixelDensity(win) : 0.0f, ThreadKind());
+    g_ps = PresentStats{};
+    g_ps.since = now;
 }
 
 void VulkanBackend::RenderUi() {
@@ -3405,9 +3466,16 @@ void VulkanBackend::Present(const Surface& front) {
         pi.pSwapchains = &swap_;
         pi.pImageIndices = &index;
         VkResult r = vkQueuePresentKHR(queue_, &pi);
+        g_ps.last_present = r;
+        if (r == VK_SUBOPTIMAL_KHR) g_ps.present_suboptimal++;
+        else if (r == VK_ERROR_OUT_OF_DATE_KHR) g_ps.present_out_of_date++;
+        else if (r != VK_SUCCESS) g_ps.present_other++;
+        g_ps.presented++;
         if (r == VK_ERROR_OUT_OF_DATE_KHR) swap_stale_ = true;
         if (r == VK_ERROR_SURFACE_LOST_KHR) surface_lost_ = true;
     }
+    if (!shown) g_ps.dropped++;
+    ReportPresents();
     presents_++;
     presents_seen_.store(presents_);
     frame_++;
