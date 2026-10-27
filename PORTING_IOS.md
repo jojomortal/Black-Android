@@ -194,6 +194,11 @@ Verified from the device log (`scripts/install-ios.sh run` then `logs`; per-seco
   (`touch::ReleaseAll`), and touches that begin in a 20 pt top / 24 pt bottom margin (`platform::TouchMarginsPixels`, iOS
   only) are ignored unless they hit a control. A real tap in the bottom 24 pt on a menu is ignored too.
 
+- App icon: `ios/Assets.xcassets/AppIcon.appiconset` (1024 px, cropped and scaled from the cover art in
+  `app/src/main/res/drawable-nodpi/ic_launcher_art.png`, no alpha), compiled by actool (`Assets.car`); it looks right on
+  the home screen (player report). The source art is 327 px wide, so a higher-resolution BLACK image would sharpen it;
+  no dark or tinted iOS 18 variants.
+
 Not yet verified: a background much longer than 4 minutes (iOS may kill a suspended app after a while or under memory
 pressure), the safe-area layout, the Europe disc, the EasySMX M15 controller.
 The audio session is `SoloAmbient` until SDL opens the device, then `Playback`.
