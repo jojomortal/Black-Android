@@ -167,7 +167,7 @@ void SafeAreaPixels(SDL_Window* window, float& x, float& y, float& w, float& h) 
     w = float(pw), h = float(ph);
 }
 
-float TouchTopMarginPixels(SDL_Window*) { return 0; }
+void TouchMarginsPixels(SDL_Window*, float& top, float& bottom) { top = bottom = 0; }
 
 bool TouchControls() { return true; }
 bool AcceptsFinger(uint64_t) { return true; }

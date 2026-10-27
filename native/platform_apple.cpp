@@ -271,13 +271,16 @@ void SafeAreaPixels(SDL_Window* window, float& x, float& y, float& w, float& h) 
 #endif
 }
 
-float TouchTopMarginPixels(SDL_Window* window) {
+void TouchMarginsPixels(SDL_Window* window, float& top, float& bottom) {
+    top = bottom = 0;
 #if TARGET_OS_IPHONE
-    // about 20 points, the strip the status bar and the Dynamic Island's side sit in
-    return window ? 20.0f * SDL_GetWindowPixelDensity(window) : 0.0f;
+    // about 20 points at the top (the strip Control Center is pulled from) and 24 at the bottom (the home indicator's)
+    if (!window) return;
+    float density = SDL_GetWindowPixelDensity(window);
+    top = 20.0f * density;
+    bottom = 24.0f * density;
 #else
     (void)window;
-    return 0;
 #endif
 }
 

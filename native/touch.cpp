@@ -1191,11 +1191,13 @@ bool OnEvent(const SDL_Event& e) {
             std::lock_guard lock(g_lock);
             EnsureLayout();
             if (e.type == SDL_EVENT_FINGER_DOWN) {
-                // a touch that begins in the top margin is the system's pull (Control Center), not a tap: kept from the
-                // game, but for a control drawn there
-                if (!g_editing && y < platform::TouchTopMarginPixels(host::Window()) && HitButton(x, y) == kButtonCount) {
-                    LOGI("touch: finger began in the top margin (y %.0f of %.0f): the system's", double(y),
-                         double(platform::TouchTopMarginPixels(host::Window())));
+                // a touch that begins at the top or the bottom edge is the system's pull or swipe (Control Center, the home
+                // screen, the app switcher), not a tap: kept from the game, but for a control drawn there
+                float top = 0, bottom = 0;
+                platform::TouchMarginsPixels(host::Window(), top, bottom);
+                if (!g_editing && (y < top || y > Height() - bottom) && HitButton(x, y) == kButtonCount) {
+                    LOGI("touch: finger began in the %s margin (y %.0f of %.0f): the system's", y < top ? "top" : "bottom",
+                         double(y), double(Height()));
                     g_ignored.push_back(e.tfinger.fingerID);
                     return true;
                 }

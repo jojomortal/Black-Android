@@ -42,9 +42,10 @@ std::filesystem::path AssetPath(const char* relative);
 // the part of the window the controls may sit in, in pixels: the notch's and the home indicator's insets are left out on iOS,
 // elsewhere it is the whole window
 void SafeAreaPixels(SDL_Window* window, float& x, float& y, float& w, float& h);
-// pixels at the top of the screen where a touch is the system's, not the game's (iOS: Control Center and the notification
-// shade come from there, and the first pull of a deferred edge reaches the app); 0 elsewhere
-float TouchTopMarginPixels(SDL_Window* window);
+// pixels at the top and the bottom of the screen where a touch is the system's, not the game's (iOS: Control Center and
+// the notification shade come from the top, the home screen and the app switcher from the bottom, and the first swipe of a
+// deferred edge reaches the app); 0 elsewhere
+void TouchMarginsPixels(SDL_Window* window, float& top, float& bottom);
 // the touch controls are for a touch screen: always on a phone, on a Mac only while a direct touch device is present
 bool TouchControls();
 // a finger event of this touch device (SDL_TouchID) is the player's: not a Mac trackpad's
