@@ -10,7 +10,7 @@ case "$1" in
     install) xcrun devicectl device install app --device $DEV out/ios/Black.app ;;
     run) # the app's stderr goes to os_log, not the console: read the log file with "logs"
          xcrun devicectl device process launch --device $DEV --terminate-existing \
-             --environment-variables '{"BLACK_DEBUG_PRESENT":"1"}' $ID ;;
+             --environment-variables '{"BLACK_DEBUG_PRESENT":"1","BLACK_DEBUG_INPUT":"1"}' $ID ;;
     game) [ -n "$2" ] || { echo "usage: install-ios.sh game <file>" >&2; exit 1; }
           xcrun devicectl device copy to --device $DEV --domain-type appDataContainer --domain-identifier $ID \
               --source "$2" --destination "Documents/Black/$(basename "$2")" ;;

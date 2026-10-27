@@ -2,6 +2,8 @@
 // the system's log. BLACK_DATA_DIR and BLACK_GAME_DIR point a development build at a folder of its own.
 #include "platform.h"
 
+#include "platform_apple.h"
+
 #include <TargetConditionals.h>
 #include <sys/sysctl.h>
 #include <unistd.h>
@@ -99,10 +101,14 @@ bool SDLCALL LifecycleWatch(void*, SDL_Event* e) {
             LOGR("ios: will enter background");
             g_set_foreground(false);
             break;
-        case SDL_EVENT_DID_ENTER_BACKGROUND: LOGR("ios: did enter background"); break;
+        case SDL_EVENT_DID_ENTER_BACKGROUND:
+            LOGR("ios: did enter background");
+            LogAudioSession("did enter background");
+            break;
         case SDL_EVENT_WILL_ENTER_FOREGROUND: LOGR("ios: will enter foreground"); break;
         case SDL_EVENT_DID_ENTER_FOREGROUND:
             LOGR("ios: did enter foreground");
+            LogAudioSession("did enter foreground");
             g_set_foreground(true);
             break;
         case SDL_EVENT_LOW_MEMORY: LOGR("ios: low memory warning, %zu MB available", size_t(os_proc_available_memory() >> 20)); break;
@@ -114,7 +120,9 @@ bool SDLCALL LifecycleWatch(void*, SDL_Event* e) {
 }  // namespace
 #endif
 
+// the one hook main.cpp calls once SDL is up: the Apple observers start here too
 void WatchLifecycle(void (*set_foreground)(bool)) {
+    StartAppleObservers();
 #if TARGET_OS_IPHONE
     g_set_foreground = set_foreground;
     SDL_AddEventWatch(LifecycleWatch, nullptr);
