@@ -8,12 +8,14 @@ DEV=${BLACK_DEVICE:-<device UDID>}
 ID=com.muhammad.black
 case "$1" in
     install) xcrun devicectl device install app --device $DEV out/ios/Black.app ;;
-    run) xcrun devicectl device process launch --device $DEV --terminate-existing --console $ID ;;
+    run) # the app's stderr goes to os_log, not the console: read the log file with "logs"
+         xcrun devicectl device process launch --device $DEV --terminate-existing \
+             --environment-variables '{"BLACK_DEBUG_PRESENT":"1"}' $ID ;;
     game) [ -n "$2" ] || { echo "usage: install-ios.sh game <file>" >&2; exit 1; }
           xcrun devicectl device copy to --device $DEV --domain-type appDataContainer --domain-identifier $ID \
               --source "$2" --destination "Documents/Black/$(basename "$2")" ;;
     logs) mkdir -p out/ios/device-logs
           xcrun devicectl device copy from --device $DEV --domain-type appDataContainer --domain-identifier $ID \
-              --source Library/Application\ Support --destination out/ios/device-logs ;;
+              --source "Library/Application Support/com.muhammad/Black/logs" --destination out/ios/device-logs ;;
     *) sed -n 2,5p "$0"; exit 1 ;;
 esac

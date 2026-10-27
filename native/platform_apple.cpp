@@ -18,7 +18,9 @@
 
 #if TARGET_OS_IPHONE
 #include <os/log.h>
+#include <os/proc.h>
 
+#include <chrono>
 #include <thread>
 #endif
 
@@ -66,6 +68,13 @@ void RedirectLog() {
                 os_log(log, "%{public}s", line.substr(0, nl).c_str());
         }
     }).detach();
+    // the file log is only flushed on a warning: a log read off the phone while the game runs would lag behind
+    std::thread([] {
+        for (;;) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            logx::Flush();
+        }
+    }).detach();
 #endif
 }
 
@@ -82,9 +91,23 @@ namespace {
 
 void (*g_set_foreground)(bool) = nullptr;
 
+// report lines (flushed at once): the transitions a bug report about the GPU after a switch of apps needs, in the order
+// iOS sends them
 bool SDLCALL LifecycleWatch(void*, SDL_Event* e) {
-    if (e->type == SDL_EVENT_WILL_ENTER_BACKGROUND) g_set_foreground(false);
-    else if (e->type == SDL_EVENT_DID_ENTER_FOREGROUND) g_set_foreground(true);
+    switch (e->type) {
+        case SDL_EVENT_WILL_ENTER_BACKGROUND:
+            LOGR("ios: will enter background");
+            g_set_foreground(false);
+            break;
+        case SDL_EVENT_DID_ENTER_BACKGROUND: LOGR("ios: did enter background"); break;
+        case SDL_EVENT_WILL_ENTER_FOREGROUND: LOGR("ios: will enter foreground"); break;
+        case SDL_EVENT_DID_ENTER_FOREGROUND:
+            LOGR("ios: did enter foreground");
+            g_set_foreground(true);
+            break;
+        case SDL_EVENT_LOW_MEMORY: LOGR("ios: low memory warning, %zu MB available", size_t(os_proc_available_memory() >> 20)); break;
+        default: break;
+    }
     return true;
 }
 
@@ -167,7 +190,11 @@ void LogDevice() {
 #else
     LOGR("Device: %s, macOS %s", Sysctl("hw.model").c_str(), Sysctl("kern.osproductversion").c_str());
 #endif
+#if TARGET_OS_IPHONE
+    LOGR("CPU: %d cores, %zu MB available to the app", SDL_GetNumLogicalCPUCores(), size_t(os_proc_available_memory() >> 20));
+#else
     LOGR("CPU: %s (%d threads)", Sysctl("machdep.cpu.brand_string").c_str(), SDL_GetNumLogicalCPUCores());
+#endif
 }
 
 namespace {
