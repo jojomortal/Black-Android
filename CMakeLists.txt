@@ -131,13 +131,17 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     # an app bundle: Info.plist from ios/, the touch skin in its resources; signed afterwards by scripts/sign-ios.sh
     set(SKIN_PNG ${REPO}/app/src/main/assets/skins/buttons.png)
     set_source_files_properties(${SKIN_PNG} PROPERTIES MACOSX_PACKAGE_LOCATION skins)
-    add_executable(main MACOSX_BUNDLE ${MAIN_SOURCES} ${SKIN_PNG})
+    # the app icon: 1024 px, from the cover art the project already uses, compiled by actool
+    set(ICON_CATALOG ${REPO}/ios/Assets.xcassets)
+    set_source_files_properties(${ICON_CATALOG} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    add_executable(main MACOSX_BUNDLE ${MAIN_SOURCES} ${SKIN_PNG} ${ICON_CATALOG})
     set_target_properties(main PROPERTIES
         OUTPUT_NAME Black
         MACOSX_BUNDLE_INFO_PLIST ${REPO}/ios/Info.plist.in
         MACOSX_BUNDLE_GUI_IDENTIFIER com.muhammad.black
         MACOSX_BUNDLE_SHORT_VERSION_STRING 0.1
         MACOSX_BUNDLE_BUNDLE_VERSION 1
+        XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME AppIcon
         XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED NO
         XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY 1)
 else()
