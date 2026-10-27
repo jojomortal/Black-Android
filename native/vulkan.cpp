@@ -34,6 +34,7 @@
 #include "gpu/shaders.h"
 #include "gpu/texture.h"
 #include "gpu/vertex.h"
+#include "hd_textures.h"
 #include "host.h"
 #include "kernel/kernel.h"
 #include "kernel/memory.h"
@@ -2782,6 +2783,7 @@ VkImageView VulkanBackend::BindGuestTexture(const State& s, int stage, const Tex
         uint64_t sig = MemSig(d.data, TotalSize(d)) ^ DirtyEpoch(d.data) ^ palette.hash;
         if (sig != t.sig || !same) {
             t.sig = sig;
+            hd::Note(d, fi, static_cast<const uint8_t*>(kernel::HostPtr(d.data)));
             UploadTexture(t, d, fi, static_cast<const uint8_t*>(kernel::HostPtr(d.data)), palette.va ? palette.colours : nullptr);
         }
     }
