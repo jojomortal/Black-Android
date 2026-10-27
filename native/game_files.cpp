@@ -1,10 +1,6 @@
-// The game on Android: its files or a disc image (.iso) in the Black folder on the phone's storage or on an SD card
-// (all files access granted) or in the app's own assets folder. The xbe must be the one this build was recompiled from; the Europe xbe
+// The game's files or a disc image (.iso) in the folders the platform names (platform.h). The xbe must be the one this build was recompiled from; the Europe xbe
 // is turned into the US one by src/common/europe.patch, linked into the library.
-#include <jni.h>
-
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_system.h>
 
 #include <algorithm>
 #include <cctype>
@@ -15,90 +11,19 @@
 #include "image_symbols.h"
 #include "kernel/crypto.h"
 #include "kernel/disc.h"
+#include "platform.h"
 
 extern const char kImageSha1[];  // the xbe recompiled into this library, written by CMake
 
-// src/common/europe.patch, EUROPE_PATCH as CMake names it
-__asm__(".section .rodata\n"
-        ".global kEuropePatch\n"
-        ".global kEuropePatchEnd\n"
-        ".balign 16\n"
-        "kEuropePatch:\n"
-        ".incbin \"" EUROPE_PATCH "\"\n"
-        "kEuropePatchEnd:\n"
-        ".previous\n");
+// src/common/europe.patch, as the byte array CMake makes of it
 extern "C" const uint8_t kEuropePatch[];
-extern "C" const uint8_t kEuropePatchEnd[];
+extern "C" const uint8_t* const kEuropePatchEnd;
 
 namespace app {
 
 namespace {
 
 namespace fs = std::filesystem;
-
-// the shared storage's folder for the game, readable with all files access: the files or the image in it, or in its
-// assets folder
-constexpr const char* kShared = "/storage/emulated/0/Black";
-constexpr const char* kVolumes = "/storage";
-
-// the Black folders BlackActivity has from Android's storage volumes, which some phones don't show in /storage
-std::vector<fs::path> ActivityCardFolders() {
-    std::vector<fs::path> out;
-    auto* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
-    auto activity = static_cast<jobject>(SDL_GetAndroidActivity());
-    if (!env || !activity) return out;
-    jclass cls = env->GetObjectClass(activity);
-    jmethodID m = env->GetMethodID(cls, "cardFolderPaths", "()[Ljava/lang/String;");
-    auto paths = m ? static_cast<jobjectArray>(env->CallObjectMethod(activity, m)) : nullptr;
-    if (env->ExceptionCheck()) {
-        env->ExceptionClear();
-        paths = nullptr;
-    }
-    for (jsize i = 0, n = paths ? env->GetArrayLength(paths) : 0; i < n; i++) {
-        auto s = static_cast<jstring>(env->GetObjectArrayElement(paths, i));
-        if (!s) continue;
-        const char* c = env->GetStringUTFChars(s, nullptr);
-        if (c) {
-            out.emplace_back(c);
-            env->ReleaseStringUTFChars(s, c);
-        }
-        env->DeleteLocalRef(s);
-    }
-    if (paths) env->DeleteLocalRef(paths);
-    env->DeleteLocalRef(cls);
-    env->DeleteLocalRef(activity);
-    return out;
-}
-
-// the Black folder on each SD card or USB stick Android has mounted, /storage/<volume id>/Black; all files access
-// reads them as it does the phone's own storage
-std::vector<fs::path> RemovableFolders() {
-    std::vector<fs::path> out = ActivityCardFolders();
-    std::error_code ec, dir_ec;
-    for (auto& e : fs::directory_iterator(kVolumes, ec)) {
-        std::string name = e.path().filename().string();
-        if (name == "emulated" || name == "self" || !e.is_directory(dir_ec)) continue;
-        out.push_back(e.path() / "Black");
-    }
-    static bool logged = false;
-    if (ec && !logged) {
-        LOGW("game: %s cannot be listed: %s", kVolumes, ec.message().c_str());
-        logged = true;
-    }
-    std::sort(out.begin(), out.end());
-    out.erase(std::unique(out.begin(), out.end()), out.end());
-    return out;
-}
-
-std::vector<fs::path> AssetFolders() {
-    std::vector<fs::path> out = {fs::path(kShared), fs::path(kShared) / "assets"};
-    for (const fs::path& card : RemovableFolders()) {
-        out.push_back(card);
-        out.push_back(card / "assets");
-    }
-    out.push_back(ExeDir() / "assets");
-    return out;
-}
 
 std::string Sha1(const std::vector<uint8_t>& data) {
     alignas(8) uint8_t ctx[128];
@@ -248,17 +173,12 @@ void CheckImage(const kernel::Disc& disc, const fs::path& iso) {
              iso.string().c_str(), past, (unsigned long long)size, first.c_str());
 }
 
-// no game yet: the activity's dialog tells the player where it goes and asks for the access; this waits a moment
-// before looking again, keeping SDL's events moving
+// no game yet: on Android the activity's dialog tells the player where it goes and asks for the access; this waits a
+// moment before looking again, keeping SDL's events moving
 void WaitForGame() {
     static bool logged = false;
     if (!logged) {
-        std::error_code ec;
-        fs::is_directory(kShared, ec);
-        std::string cards;
-        for (const fs::path& card : RemovableFolders()) cards += ", " + card.string();
-        LOGE("game: no game files in %s%s or %s%s, waiting for them", kShared, cards.c_str(),
-             (ExeDir() / "assets").c_str(), ec == std::errc::permission_denied ? ", no access to the first" : "");
+        platform::LogGameMissing();
         logged = true;
     }
     for (int i = 0; i < 10; i++) {
@@ -341,7 +261,7 @@ int Search(GameFiles& game) {
     };
 
     std::error_code ec;
-    for (const fs::path& assets : AssetFolders()) {
+    for (const fs::path& assets : platform::GameFolders()) {
         if (!fs::is_directory(assets, ec)) continue;
         std::vector<uint8_t> xbe;
         if (ReadHostFile(assets / IMAGE_XBE, xbe) && consider(assets, assets, std::move(xbe), nullptr)) return 1;

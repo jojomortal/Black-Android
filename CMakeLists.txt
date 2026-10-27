@@ -1,12 +1,20 @@
-# Black (original Xbox), statically recompiled, as an Android library: libmain.so, loaded by SDL's activity.
-# The x86 code is recompiled on the PC first (build.bat): this build takes generated/game as it is, with the SDK's
-# portable runtime, the game's sources in src and the Android host in native.
+# Black (original Xbox), statically recompiled: libmain.so on Android, loaded by SDL's activity, and an executable on macOS.
+# The x86 code is recompiled first (build.bat, scripts/build-apple.sh): this build takes generated/game as it is, with
+# the SDK's portable runtime, the game's sources in src and the host in native.
 
 cmake_minimum_required(VERSION 3.22)
 project(black_android LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+if(NOT ANDROID AND NOT APPLE)
+    message(FATAL_ERROR "This build is for Android and Apple hosts")
+endif()
+# unoptimized recompiled code is too slow to run
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
+endif()
 
 set(REPO ${CMAKE_CURRENT_SOURCE_DIR})
 set(NATIVE ${CMAKE_CURRENT_SOURCE_DIR}/native)
@@ -44,6 +52,14 @@ foreach(i RANGE ${last})
 endforeach()
 file(SHA1 ${XBE} xbe_sha1)
 file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/image_sha1.cpp CONTENT "extern const char kImageSha1[] = \"${xbe_sha1}\";\n")
+# src/common/europe.patch as a byte array for game_files.cpp: .incbin is ELF assembly, this builds on every host
+set(EUROPE_PATCH_FILE ${GAME}/common/europe.patch)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${EUROPE_PATCH_FILE})
+file(READ ${EUROPE_PATCH_FILE} europe_hex HEX)
+string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," europe_bytes "${europe_hex}")
+file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/europe_patch.cpp CONTENT
+"#include <cstdint>\nextern \"C\" {\nextern const uint8_t kEuropePatch[];\nextern const uint8_t* const kEuropePatchEnd;\nconst uint8_t kEuropePatch[] = {${europe_bytes}};\nconst uint8_t* const kEuropePatchEnd = kEuropePatch + sizeof(kEuropePatch);\n}\n"
+ESCAPE_QUOTES)
 # the build's version for the log: the commit when the project is in git, else unknown
 set(BUILD_COMMIT "unknown")
 find_package(Git QUIET)
@@ -61,8 +77,14 @@ set(SDL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL)
 if(NOT EXISTS ${SDL_DIR}/CMakeLists.txt)
     message(FATAL_ERROR "SDL3 is missing from ${SDL_DIR}: the Gradle build clones it")
 endif()
-set(SDL_SHARED ON CACHE BOOL "" FORCE)
-set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+if(ANDROID)
+    # the activity loads libSDL3.so
+    set(SDL_SHARED ON CACHE BOOL "" FORCE)
+    set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+else()
+    set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+    set(SDL_STATIC ON CACHE BOOL "" FORCE)
+endif()
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
 set(SDL_RENDER OFF CACHE BOOL "" FORCE)
 set(SDL_GPU OFF CACHE BOOL "" FORCE)
@@ -87,12 +109,25 @@ list(FILTER RUNTIME_SOURCES EXCLUDE REGEX
      "/runtime/app/|/core/input\\.cpp$|/gpu/(d3d12|render_thread)\\.cpp$|/audio/xaudio2\\.cpp$|/xdk/(dsound|d3d8)\\.cpp$")
 # the game's sources: its hooks, sound, Direct3D 8 and settings
 file(GLOB GAME_HOST_SOURCES CONFIGURE_DEPENDS ${GAME}/*/*.cpp)
+# the host: native/*.cpp but the platform parts, of which the build takes its own
 file(GLOB ANDROID_SOURCES CONFIGURE_DEPENDS ${NATIVE}/*.cpp)
+list(FILTER ANDROID_SOURCES EXCLUDE REGEX "/platform_[a-z]+\\.cpp$")
+if(ANDROID)
+    list(APPEND ANDROID_SOURCES ${NATIVE}/platform_android.cpp)
+else()
+    list(APPEND ANDROID_SOURCES ${NATIVE}/platform_apple.cpp)
+endif()
 set(IMGUI_SOURCES ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp)
 
-add_library(main SHARED ${RUNTIME_SOURCES} ${GAME_HOST_SOURCES} ${ANDROID_SOURCES} ${GEN_SOURCES} ${IMGUI_SOURCES}
-            ${CMAKE_CURRENT_BINARY_DIR}/image_sha1.cpp)
+set(MAIN_SOURCES ${RUNTIME_SOURCES} ${GAME_HOST_SOURCES} ${ANDROID_SOURCES} ${GEN_SOURCES} ${IMGUI_SOURCES}
+    ${CMAKE_CURRENT_BINARY_DIR}/image_sha1.cpp ${CMAKE_CURRENT_BINARY_DIR}/europe_patch.cpp)
+if(ANDROID)
+    add_library(main SHARED ${MAIN_SOURCES})
+else()
+    add_executable(main ${MAIN_SOURCES})
+    set_target_properties(main PROPERTIES OUTPUT_NAME black)
+endif()
 # compat/ for the SDK's x86 header, the SDK harness's for the Winsock and DXGI names its portable runtime uses
 target_include_directories(main PRIVATE ${NATIVE}/compat ${SDK}/harness/compat ${NATIVE} ${GAME} ${SDK}/runtime ${GEN}
                            ${CMAKE_CURRENT_BINARY_DIR} ${glslang_SOURCE_DIR})
@@ -100,14 +135,38 @@ target_include_directories(main SYSTEM PRIVATE ${imgui_SOURCE_DIR})
 # x86 chars are signed, as the game's code and the runtime were written for
 target_compile_options(main PRIVATE -fno-strict-aliasing -fsigned-char)
 set(HOST_SOURCES ${RUNTIME_SOURCES} ${GAME_HOST_SOURCES} ${ANDROID_SOURCES})
-set_source_files_properties(${HOST_SOURCES} PROPERTIES COMPILE_OPTIONS "-include;${NATIVE}/compat/crt.h")
+option(BLACK_VERBOSE_LOG "info and warning lines in the log, as a debug build writes them (the SDK's logx follows NDEBUG)" OFF)
+set(HOST_OPTIONS -include ${NATIVE}/compat/crt.h)
+if(BLACK_VERBOSE_LOG)
+    list(APPEND HOST_OPTIONS -UNDEBUG)
+endif()
+set_source_files_properties(${HOST_SOURCES} PROPERTIES COMPILE_OPTIONS "${HOST_OPTIONS}")
 set_source_files_properties(${GEN_SOURCES} PROPERTIES
     COMPILE_OPTIONS "-O2;-w;-fno-strict-aliasing;-fsigned-char")
 set_source_files_properties(${NATIVE}/vk_shader.cpp PROPERTIES COMPILE_DEFINITIONS ENABLE_HLSL)
-set_source_files_properties(${NATIVE}/game_files.cpp PROPERTIES
-    COMPILE_DEFINITIONS "EUROPE_PATCH=\"${GAME}/common/europe.patch\""
-    OBJECT_DEPENDS ${GAME}/common/europe.patch)
-target_link_libraries(main PRIVATE SDL3::SDL3 tomlplusplus::tomlplusplus glslang glslang-default-resource-limits
-                      vulkan android log)
-# 16 KB pages, as Android 15 devices may have
-target_link_options(main PRIVATE -Wl,-z,max-page-size=16384)
+target_link_libraries(main PRIVATE SDL3::SDL3 tomlplusplus::tomlplusplus glslang glslang-default-resource-limits)
+if(ANDROID)
+    target_link_libraries(main PRIVATE vulkan android log)
+    # 16 KB pages, as Android 15 devices may have
+    target_link_options(main PRIVATE -Wl,-z,max-page-size=16384)
+else()
+    # MoltenVK linked in, not loaded: SDL finds vkGetInstanceProcAddr in the executable. It is only pulled from the
+    # archive if something asks for it, hence -u
+    set(MOLTENVK_PREFIX "" CACHE PATH "where MoltenVK's lib and the Vulkan headers are (Homebrew's molten-vk and vulkan-headers)")
+    find_library(MOLTENVK_LIB NAMES libMoltenVK.a MoltenVK HINTS ${MOLTENVK_PREFIX}/lib /opt/homebrew/opt/molten-vk/lib
+                 /usr/local/opt/molten-vk/lib REQUIRED)
+    find_path(VULKAN_HEADERS vulkan/vulkan.h HINTS ${MOLTENVK_PREFIX}/include /opt/homebrew/opt/vulkan-headers/include
+              /usr/local/opt/vulkan-headers/include REQUIRED)
+    target_include_directories(main SYSTEM PRIVATE ${VULKAN_HEADERS})
+    target_link_libraries(main PRIVATE ${MOLTENVK_LIB} "-framework Metal" "-framework QuartzCore" "-framework IOSurface"
+                          "-framework IOKit" "-framework Foundation" "-framework CoreGraphics")
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        target_link_libraries(main PRIVATE "-framework UIKit")
+    else()
+        target_link_libraries(main PRIVATE "-framework AppKit")
+    endif()
+    target_link_options(main PRIVATE -Wl,-u,_vkGetInstanceProcAddr)
+    # the touch controls' skin next to the executable
+    add_custom_command(TARGET main POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory
+                       ${REPO}/app/src/main/assets/skins $<TARGET_FILE_DIR:main>/skins)
+endif()

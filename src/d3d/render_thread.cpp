@@ -421,7 +421,11 @@ private:
     }
 
     void Run() {
+#ifdef __APPLE__
+        pthread_setname_np("render");  // Darwin names the calling thread
+#else
         pthread_setname_np(pthread_self(), "render");
+#endif
         for (;;) {
             Batch* b;
             {

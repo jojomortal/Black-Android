@@ -35,6 +35,7 @@
 #include "common/translations.h"
 #include "core/log.h"
 #include "host.h"
+#include "platform.h"
 
 namespace input {
 
@@ -1374,7 +1375,7 @@ enum SkinPart : int { kFire, kAim, kMode, kReload, kCrouch, kMelee, kUse, kGrena
                       kPause, kGyroPart, kBackPart, kSuppressor, kStickBase, kStickKnob, kSkinParts, kNoPart = -1 };
 constexpr float kSkinCellW = 192, kSkinCellH = 209;
 constexpr int kSkinColumns = 6;
-constexpr const char* kSkinFile = "skins/buttons.png";  // in the APK's assets
+constexpr const char* kSkinFile = "skins/buttons.png";  // in the app's assets
 ImTextureID g_skin_texture = nullptr;  // render thread
 float g_skin_w = 1, g_skin_h = 1;      // the atlas, pixels
 constexpr ImU32 kSkinInk = IM_COL32(178, 190, 170, 255);  // the skin's light grey green, for the icons it has none of
@@ -1624,7 +1625,7 @@ void StepStickMode(int) {
 }
 
 bool LoadSkin(std::vector<uint8_t>& rgba, uint32_t& w, uint32_t& h) {
-    SDL_Surface* png = SDL_LoadPNG(kSkinFile);
+    SDL_Surface* png = SDL_LoadPNG(platform::AssetPath(kSkinFile).string().c_str());
     SDL_Surface* s = png ? SDL_ConvertSurface(png, SDL_PIXELFORMAT_ABGR8888) : nullptr;  // R G B A in memory
     SDL_DestroySurface(png);
     if (!s) {

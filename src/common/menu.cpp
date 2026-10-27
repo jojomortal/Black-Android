@@ -59,6 +59,7 @@ uint32_t Percent();
 
 // native/update.cpp: the activity asks GitHub for a newer release and says what it found
 namespace host {
+bool UpdatesSupported();
 void CheckForUpdates();
 }  // namespace host
 
@@ -1012,7 +1013,8 @@ const rows::Row* rows::Page(int page, size_t* count) {
         return kTouchRows;
     }
     if (page == kGeneralPage) {
-        *count = std::size(kGeneralRows);
+        // the UPDATES heading and its row are the last two
+        *count = std::size(kGeneralRows) - (host::UpdatesSupported() ? 0 : 2);
         return kGeneralRows;
     }
     *count = std::size(kGraphicsRows);

@@ -11,6 +11,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -36,6 +37,8 @@
 #include "host.h"
 #include "kernel/kernel.h"
 #include "kernel/memory.h"
+#include "platform.h"
+#include "vk_portability.h"
 #include "vk_shader.h"
 
 namespace gpu {
@@ -247,8 +250,12 @@ VkBlendFactor Blend(uint32_t v, bool alpha) {
         case 0x308: return alpha ? VK_BLEND_FACTOR_ONE : VK_BLEND_FACTOR_SRC_ALPHA_SATURATE;
         case 0x8001: return VK_BLEND_FACTOR_CONSTANT_COLOR;
         case 0x8002: return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
-        case 0x8003: return VK_BLEND_FACTOR_CONSTANT_ALPHA;
-        case 0x8004: return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;
+        // a portability layer may not take constant alpha for the colour (vk_portability.h)
+        case 0x8003:
+            return alpha || vkport::Get().constant_alpha_color_blend ? VK_BLEND_FACTOR_CONSTANT_ALPHA : VK_BLEND_FACTOR_CONSTANT_COLOR;
+        case 0x8004:
+            return alpha || vkport::Get().constant_alpha_color_blend ? VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA
+                                                                     : VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
         default: return VK_BLEND_FACTOR_ONE;
     }
 }
@@ -338,6 +345,26 @@ void ColourBlock(const uint8_t* b, bool dxt1, uint8_t* out) {
     if (dxt1 && c0 <= c1) pal[3][3] = 0;
     uint32_t bits = uint32_t(b[4] | b[5] << 8 | b[6] << 16 | uint32_t(b[7]) << 24);
     for (int i = 0; i < 16; i++) std::memcpy(out + i * 4, pal[(bits >> (i * 2)) & 3], 4);
+}
+
+// what the CPU decode costs, logged every few seconds it runs: the vulkan thread's own, no lock
+void NoteDxtDecode(std::chrono::steady_clock::duration took, size_t out_bytes) {
+    using clock = std::chrono::steady_clock;
+    static clock::duration total{}, since{};
+    static uint64_t levels = 0, bytes = 0;
+    static clock::time_point logged = clock::now();
+    auto ms = [](clock::duration d) { return std::chrono::duration<double, std::milli>(d).count(); };
+    total += took;
+    since += took;
+    levels++;
+    bytes += out_bytes;
+    clock::time_point now = clock::now();
+    if (now - logged < std::chrono::seconds(5)) return;
+    LOGI("vulkan: DXT decoded on the CPU: %llu levels, %.1f MB, %.1f ms in all, %.1f ms in the last %.0f s",
+         (unsigned long long)levels, bytes / 1048576.0, ms(total), ms(since),
+         std::chrono::duration<double>(now - logged).count());
+    since = {};
+    logged = now;
 }
 
 // a level of DXT1, 3 or 5 blocks (bw x bh per slice, row_pitch bytes a block row) into w x h BGRA texels
@@ -1268,6 +1295,7 @@ bool VulkanBackend::CreateInstance() {
     ai.apiVersion = std::min<uint32_t>(loader, VK_API_VERSION_1_3);
     VkInstanceCreateInfo ci{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
     ci.pApplicationInfo = &ai;
+    vkport::InstanceSetup(exts, ci.flags);
     ci.enabledExtensionCount = uint32_t(exts.size());
     ci.ppEnabledExtensionNames = exts.data();
     VK_CHECK(vkCreateInstance(&ci, nullptr, &instance_));
@@ -1279,9 +1307,8 @@ bool VulkanBackend::CreateSurface() {
     uint32_t epoch = host::SurfaceEpoch();
     // Android has not handed the window back yet (resuming, or a surface change): wait for it without asking SDL,
     // which only fails, and log the outage once, not every present
-    SDL_PropertiesID props = SDL_GetWindowProperties(host::Window());
-    if (!SDL_GetPointerProperty(props, SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr)) {
-        if (surface_failures_++ == 0) LOGI("vulkan: waiting for Android's window");
+    if (!platform::SurfaceReady(host::Window())) {
+        if (surface_failures_++ == 0) LOGI("vulkan: waiting for the window");
         return false;
     }
     if (!SDL_Vulkan_CreateSurface(host::Window(), instance_, nullptr, &surface_)) {
@@ -1343,6 +1370,7 @@ bool VulkanBackend::PickDevice() {
             auto want = [&](const char* name) {
                 if (HasExtension(ext, name)) dev_exts_.push_back(name);
             };
+            vkport::Query(pd, ext, dev_exts_);
             if (api < VK_API_VERSION_1_3) {
                 want(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
                 want(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME);
@@ -1384,8 +1412,10 @@ bool VulkanBackend::CreateDevice() {
     feats_.samplerAnisotropy = f2.features.samplerAnisotropy;
     feats_.fillModeNonSolid = f2.features.fillModeNonSolid;
     feats_.textureCompressionBC = f2.features.textureCompressionBC;
-    bc_ = feats_.textureCompressionBC;
-    VkPhysicalDeviceFeatures2 on{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, chain()};
+    // BLACK_FORCE_NO_BC=1: the CPU decode a phone without BC textures takes, on a GPU that has them
+    const char* no_bc = std::getenv("BLACK_FORCE_NO_BC");
+    bc_ = feats_.textureCompressionBC && !(no_bc && *no_bc && *no_bc != '0');
+    VkPhysicalDeviceFeatures2 on{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, vkport::Link(chain())};
     on.features = feats_;
     dr.dynamicRendering = VK_TRUE;
     ts.timelineSemaphore = VK_TRUE;
@@ -2356,7 +2386,7 @@ VkSampler VulkanBackend::StageSampler(const State& s, int i, const DrawTextures&
     sd.addressModeU = Address(clamp && u == kTaddressWrap ? kTaddressClamp : u);
     sd.addressModeV = Address(clamp && v == kTaddressWrap ? kTaddressClamp : v);
     sd.addressModeW = Address(t[kTssAddressW]);
-    float limit = props_.limits.maxSamplerLodBias;
+    float limit = vkport::Get().sampler_lod_bias ? props_.limits.maxSamplerLodBias : 0.0f;
     sd.mipLodBias = std::clamp(Bits(t[kTssMipLodBias]), -limit, limit);
     sd.minLod = std::min(float(t[kTssMaxMipLevel]), float(stages.levels[i] - 1));
     sd.maxLod = mip ? VK_LOD_CLAMP_NONE : sd.minLod;
@@ -2684,7 +2714,9 @@ void VulkanBackend::UploadTexture(Tex& tx, const TextureDesc& d, const FormatInf
             uint32_t mw = std::max(tx.img.w >> l, 1u), mh = std::max(tx.img.h >> l, 1u), md = std::max(tx.img.d >> l, 1u);
             const std::vector<uint8_t>* src = &px;
             if (tx.decode) {
+                auto t0 = std::chrono::steady_clock::now();
                 DecodeDxt(fi.host, px, pitch, mw, mh, md, decoded);
+                NoteDxtDecode(std::chrono::steady_clock::now() - t0, decoded.size());
                 pitch = mw * 4;
                 src = &decoded;
             }

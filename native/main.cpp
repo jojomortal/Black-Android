@@ -1,9 +1,7 @@
-// The Android host: SDL's window and event loop, the settings and folders, the app's lifecycle; the game is described
+// The host: SDL's window and event loop, the settings and folders, the app's lifecycle; the game is described
 // by app::kGame (src/common/game_info.cpp)
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
-#include <android/log.h>
-#include <sys/system_properties.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -11,6 +9,7 @@
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
+#include <cstdio>
 #include <cstring>
 #include <ctime>
 #include <cwchar>
@@ -31,6 +30,7 @@
 #include "host.h"
 #include "image_symbols.h"
 #include "kernel/kernel.h"
+#include "platform.h"
 
 namespace {
 
@@ -44,29 +44,6 @@ std::string Utf8(const wchar_t* w) {
     std::string s;
     for (; w && *w; w++) s += *w < 0x80 ? char(*w) : '?';
     return s;
-}
-
-// the log's lines to logcat as well: stderr is read on a thread of its own
-void LogToLogcat() {
-    int fds[2];
-    if (pipe(fds)) return;
-    dup2(fds[1], STDERR_FILENO);
-    close(fds[1]);
-    std::thread([fd = fds[0]] {
-        char buf[1024];
-        std::string line;
-        for (ssize_t n; (n = read(fd, buf, sizeof(buf))) > 0;) {
-            line.append(buf, size_t(n));
-            for (size_t nl; (nl = line.find('\n')) != std::string::npos; line.erase(0, nl + 1))
-                __android_log_write(ANDROID_LOG_INFO, "BLACK", line.substr(0, nl).c_str());
-        }
-    }).detach();
-}
-
-std::string Property(const char* name) {
-    char v[PROP_VALUE_MAX] = {};
-    __system_property_get(name, v);
-    return v;
 }
 
 void SetForeground(bool on) {
@@ -217,9 +194,7 @@ void LogSystem() {
     std::strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
     LOGR("%ls (%s), %s, build %s", kGame.title, IMAGE_XBE, date, BLACK_COMMIT);
     LOGR("Path: %s", ExeDir().c_str());
-    LOGR("Device: %s %s, Android %s (API %d)", Property("ro.product.manufacturer").c_str(),
-         Property("ro.product.model").c_str(), Property("ro.build.version.release").c_str(), SDL_GetAndroidSDKVersion());
-    LOGR("CPU: %s (%d threads)", Property("ro.soc.model").c_str(), SDL_GetNumLogicalCPUCores());
+    platform::LogDevice();
     LOGR("RAM: %.1f GB", SDL_GetSystemRAM() / 1024.0);
     Mode desk = Desktop();
     LOGR("Display: %ux%u, %.0f Hz", desk.width, desk.height, RefreshRate());
@@ -247,14 +222,9 @@ float RenderScale(uint32_t guest_height) {
     return guest_height ? std::max(h / guest_height, 0.1f) : 1.0f;
 }
 
-// app-specific external storage: the player can reach the logs, saves and settings over USB
+// the platform's app storage: settings, saves, logs and the shader cache
 std::filesystem::path ExeDir() {
-    static const std::filesystem::path dir = [] {
-        const char* p = nullptr;
-        if (SDL_GetAndroidExternalStorageState() & SDL_ANDROID_EXTERNAL_STORAGE_WRITE) p = SDL_GetAndroidExternalStoragePath();
-        if (!p) p = SDL_GetAndroidInternalStoragePath();
-        return std::filesystem::path(p ? p : ".");
-    }();
+    static const std::filesystem::path dir = platform::DataDir();
     return dir;
 }
 
@@ -302,7 +272,7 @@ void InitUi() {
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad | ImGuiConfigFlags_IsTouchScreen;
-    io.BackendPlatformName = "android_sdl3";
+    io.BackendPlatformName = "sdl3";
 }
 
 void Dispatch(const SDL_Event& e) {
@@ -319,7 +289,7 @@ void Dispatch(const SDL_Event& e) {
             SetForeground(true);
             break;
         case SDL_EVENT_LOW_MEMORY:
-            LOGW("app: Android is low on memory");
+            LOGW("app: the OS is low on memory");
             break;
         case SDL_EVENT_SENSOR_UPDATE:
         case SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
@@ -340,13 +310,13 @@ void Dispatch(const SDL_Event& e) {
 }  // namespace
 
 int main(int, char**) {
-    LogToLogcat();
+    platform::RedirectLog();
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
     SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
     SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "0");
-    SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+    platform::SetHints();
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_GAMEPAD | SDL_INIT_AUDIO | SDL_INIT_SENSOR)) {
-        __android_log_print(ANDROID_LOG_ERROR, "BLACK", "SDL_Init: %s", SDL_GetError());
+        std::fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
     }
     logx::Init((app::ExeDir() / "logs").string(), app::kGame.log);
