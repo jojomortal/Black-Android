@@ -99,6 +99,8 @@ constexpr uint32_t kDistances[] = {1, 2, 4, 8};
 const char* const kDistanceNames[] = {"GAME DEFAULT", "2x", "4x", "8x"};
 constexpr uint32_t kAntiAliasings[] = {0, 1, 2};
 const char* const kAntiAliasingNames[] = {"OFF", "FXAA", "SSAA 2X"};
+constexpr uint32_t kTextureModes[] = {0, 1};
+const char* const kTextureNames[] = {"ORIGINAL", "HD"};
 constexpr uint32_t kFmvScales[] = {0, 1};
 const char* const kFmvScaleNames[] = {"FILL", "4:3"};
 constexpr uint32_t kScreenFilters[] = {0, 1, 2, 3, 4, 5, 6, 7, 8};
@@ -249,7 +251,7 @@ enum RowId { kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kReloadBlu
              kCheckUpdates, kTouchSensitivity, kLeftDeadzone, kRightDeadzone, kLeftSensitivity, kRightSensitivity,
              kScreenFilter, kGyroInvertX, kGyroInvertY, kUnlockLevels, kUnlockBlackOps, kTouchSkin, kCredit, kBloom,
              kFog, kAntiAliasing, kHdr, kEsp, kAimbot, kTouchStick, kDynamicRes, kDynamicTarget, kDynamicMin,
-             kDynamicMax, kDynamicHold };
+             kDynamicMax, kDynamicHold, kTextures };
 
 using rows::Kind;
 using rows::Row;
@@ -279,6 +281,7 @@ constexpr Row kGraphicsRows[] = {
     {Kind::Value, kFog, "FOG"},
     {Kind::Value, kAntiAliasing, "ANTI-ALIASING"},
     {Kind::Value, kHdr, "HDR"},
+    {Kind::Value, kTextures, "TEXTURES"},
 };
 
 constexpr Row kTouchRows[] = {
@@ -465,6 +468,9 @@ bool StepDisplayRow(int id, int step, Settings& s, char (&text)[64]) {
         case kAntiAliasing:
             std::snprintf(text, sizeof(text), "%s",
                           kAntiAliasingNames[StepTable(kAntiAliasings, o.anti_aliasing, step)]);
+            return true;
+        case kTextures:
+            std::snprintf(text, sizeof(text), "%s", kTextureNames[StepTable(kTextureModes, o.textures, step)]);
             return true;
         case kScreenFilter:
             std::snprintf(text, sizeof(text), "%s",

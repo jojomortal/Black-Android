@@ -4,4 +4,6 @@
 cd "$(dirname "$0")/.."
 export BLACK_GAME_DIR=${BLACK_GAME_DIR:-"$PWD/../Black (USA)"}
 export BLACK_DATA_DIR=${BLACK_DATA_DIR:-"$PWD/out/run-data"}
+# the HD texture pack, extracted beside the repo (Textures: HD in the options)
+[ -d "$PWD/../black-hd-pack" ] && export BLACK_HD_PACK=${BLACK_HD_PACK:-"$PWD/../black-hd-pack"}
 exec out/build/mac/black "$@"

@@ -591,6 +591,7 @@ struct Tex {
     uint64_t sig = 0;
     uint64_t frame = 0;
     uint64_t palette = 0;
+    int hd = -1;  // the HD pack's map entry this holds instead of the game's texture
 };
 
 struct PsoKey {
@@ -1171,6 +1172,7 @@ private:
     VkImageView BindGuestTexture(const State& s, int stage, const TextureDesc& d, const FormatInfo& fi,
                                  DrawTextures& stages);
     bool CreateTexture(Tex& tx, const TextureDesc& d, const FormatInfo& fi, uint64_t key);
+    bool UploadHdTexture(Tex& tx, const TextureDesc& d, int entry, uint64_t key);
     void UploadTexture(Tex& tx, const TextureDesc& d, const FormatInfo& fi, const uint8_t* p, const uint32_t* colours);
     void BuildPipelineKey(const State& s, const Assembled& a, const DrawShaders& sh, PsoKey& k);
     void KeyDepthStencil(const State& s, const Assembled& a, PsoKey& k);
@@ -1486,6 +1488,7 @@ bool VulkanBackend::CreateDevice() {
     r32f_linear_ = fp.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
     LOGI("vulkan: depth %s, BC textures %s", depth_fmt_ == VK_FORMAT_D24_UNORM_S8_UINT ? "D24S8" : "D32S8",
          bc_ ? "on the GPU" : "decoded on the CPU");
+    hd::State();  // the HD pack's map and folder looked at now, not at the first texture
     return true;
 }
 
@@ -2767,6 +2770,59 @@ void VulkanBackend::UploadTexture(Tex& tx, const TextureDesc& d, const FormatInf
     Transition(tx.img, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
+// the pack file of a map entry in place of the game's texture: its own size and levels, the game's coordinates are
+// normalised so they still fit. BC when the GPU has it, else decoded level by level like the game's own
+bool VulkanBackend::UploadHdTexture(Tex& tx, const TextureDesc& d, int entry, uint64_t key) {
+    static const uint32_t env_max = [] {
+        const char* e = std::getenv("BLACK_HD_MAX");
+        return e ? uint32_t(std::strtoul(e, nullptr, 10)) : ~0u;
+    }();
+    // no BC: every level is BGRA, so the biggest ones are left out unless BLACK_HD_MAX says otherwise (0: none)
+    uint32_t max_side = env_max != ~0u ? env_max : bc_ ? 0 : 512;
+    hd::Image im;
+    if (!hd::Load(entry, max_side, im)) return false;
+    bool compressed = im.format != hd::Image::BGRA8;
+    gpu::Host host = im.format == hd::Image::BC1 ? Host::BC1 : im.format == hd::Image::BC2 ? Host::BC2 : Host::BC3;
+    Retire(tx.img);
+    tx = Tex{};
+    tx.d = d;
+    tx.hd = entry;
+    tx.decode = compressed && !bc_;
+    tx.levels = im.levels;
+    tx.fmt = !compressed || tx.decode ? kBgra
+             : im.format == hd::Image::BC1 ? VK_FORMAT_BC1_RGBA_UNORM_BLOCK
+             : im.format == hd::Image::BC2 ? VK_FORMAT_BC2_UNORM_BLOCK : VK_FORMAT_BC3_UNORM_BLOCK;
+    if (!CreateImage(tx.img, tx.fmt, im.width, im.height, 1, 1, im.levels,
+                     VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_VIEW_TYPE_2D, false)) {
+        textures_.erase(key);
+        return false;
+    }
+    Transition(tx.img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    std::vector<uint8_t> in, decoded;
+    for (uint32_t l = 0; l < im.levels; l++) {
+        uint32_t mw = std::max(im.width >> l, 1u), mh = std::max(im.height >> l, 1u);
+        size_t end = l + 1 < im.levels ? im.offset[l + 1] : im.data.size();
+        const uint8_t* src = im.data.data() + im.offset[l];
+        size_t bytes = end - im.offset[l];
+        if (tx.decode) {
+            uint32_t block = im.format == hd::Image::BC1 ? 8 : 16, pitch = std::max(1u, (mw + 3) / 4) * block;
+            in.assign(src, src + bytes);
+            auto t0 = std::chrono::steady_clock::now();
+            DecodeDxt(host, in, pitch, mw, mh, 1, decoded);
+            NoteDxtDecode(std::chrono::steady_clock::now() - t0, decoded.size());
+            src = decoded.data();
+            bytes = decoded.size();
+        }
+        Alloc a = Upload(bytes, 16);
+        if (!a.cpu) continue;
+        std::memcpy(a.cpu, src, bytes);
+        VkBufferImageCopy c{a.off, 0, 0, {VK_IMAGE_ASPECT_COLOR_BIT, l, 0, 1}, {0, 0, 0}, {mw, mh, 1}};
+        vkCmdCopyBufferToImage(Cb(), a.buf, tx.img.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &c);
+    }
+    Transition(tx.img, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    return true;
+}
+
 VkImageView VulkanBackend::BindGuestTexture(const State& s, int stage, const TextureDesc& d, const FormatInfo& fi,
                                             DrawTextures& stages) {
     TexInfo& info = stages.info[stage];
@@ -2780,11 +2836,27 @@ VkImageView VulkanBackend::BindGuestTexture(const State& s, int stage, const Tex
     if (t.frame != presents_ + 1 || !same || t.palette != palette.hash) {
         t.frame = presents_ + 1;
         t.palette = palette.hash;
-        uint64_t sig = MemSig(d.data, TotalSize(d)) ^ DirtyEpoch(d.data) ^ palette.hash;
+        // Textures HD or Original changes it too: the texture is looked at again
+        uint64_t sig = MemSig(d.data, TotalSize(d)) ^ DirtyEpoch(d.data) ^ palette.hash ^ (uint64_t(hd::State()) << 60);
         if (sig != t.sig || !same) {
+            const uint8_t* guest = static_cast<const uint8_t*>(kernel::HostPtr(d.data));
+            const int hd_entry = hd::Find(d, fi, guest);
+            const int was_hd = t.hd;
+            uint64_t frame = t.frame, palette_hash = t.palette;
+            // a paletted texture comes here on every palette change; the pack's file is the same
+            bool done = hd_entry >= 0 && hd_entry == was_hd && same;
+            if (hd_entry >= 0 && !done) {
+                done = UploadHdTexture(t, d, hd_entry, key);
+                if (!done && textures_.find(key) == textures_.end()) return VK_NULL_HANDLE;
+            }
+            if (!done) {
+                if (t.hd >= 0 && !CreateTexture(t, d, fi, key)) return VK_NULL_HANDLE;
+                t.hd = -1;
+                UploadTexture(t, d, fi, guest, palette.va ? palette.colours : nullptr);
+            }
+            t.frame = frame;
+            t.palette = palette_hash;
             t.sig = sig;
-            hd::Note(d, fi, static_cast<const uint8_t*>(kernel::HostPtr(d.data)));
-            UploadTexture(t, d, fi, static_cast<const uint8_t*>(kernel::HostPtr(d.data)), palette.va ? palette.colours : nullptr);
         }
     }
     Transition(t.img, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);

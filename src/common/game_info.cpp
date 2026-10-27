@@ -105,6 +105,7 @@ const app::GameInfo app::kGame = {
                 {"right_stick_deadzone", nullptr, &game::Opt().right_deadzone},
                 {"fov", nullptr, &game::Opt().fov},
                 {"draw_distance", nullptr, &game::Opt().draw_distance},
+                {"textures", nullptr, &game::Opt().textures},
                 {"dynamic_resolution", &game::Opt().dynamic_resolution, nullptr},
                 {"dynamic_target_fps", nullptr, &game::Opt().dynamic_target_fps},
                 {"dynamic_min_percent", nullptr, &game::Opt().dynamic_min_percent},

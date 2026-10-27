@@ -63,17 +63,12 @@ string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," europe_bytes "${europe_hex}")
 file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/europe_patch.cpp CONTENT
 "#include <cstdint>\nextern \"C\" {\nextern const uint8_t kEuropePatch[];\nextern const uint8_t* const kEuropePatchEnd;\nconst uint8_t kEuropePatch[] = {${europe_bytes}};\nconst uint8_t* const kEuropePatchEnd = kEuropePatch + sizeof(kEuropePatch);\n}\n"
 ESCAPE_QUOTES)
-# the build's version for the log: the commit when the project is in git, else unknown
-set(BUILD_COMMIT "unknown")
-find_package(Git QUIET)
-if(GIT_EXECUTABLE)
-    execute_process(COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD WORKING_DIRECTORY ${REPO}
-                    OUTPUT_VARIABLE head OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET RESULT_VARIABLE failed)
-    if(NOT failed AND head)
-        set(BUILD_COMMIT ${head})
-    endif()
-endif()
-file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/build_info.h CONTENT "#define BLACK_COMMIT \"${BUILD_COMMIT}\"\n")
+# the build's version for the log: the commit the tree is at when the build runs (cmake/build_info.cmake), not
+# when cmake configured; created now so the first configure has the file, refreshed by a target before every build
+set(BUILD_INFO ${CMAKE_CURRENT_BINARY_DIR}/build_info.h)
+execute_process(COMMAND ${CMAKE_COMMAND} -DREPO=${REPO} -DOUT=${BUILD_INFO} -P ${REPO}/cmake/build_info.cmake)
+add_custom_target(build_info ALL COMMAND ${CMAKE_COMMAND} -DREPO=${REPO} -DOUT=${BUILD_INFO}
+                  -P ${REPO}/cmake/build_info.cmake BYPRODUCTS ${BUILD_INFO})
 
 # dependencies: SDL3 from the checkout Gradle makes (its Java side goes into the APK), the rest fetched
 set(SDL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL)
@@ -151,6 +146,7 @@ else()
     add_executable(main ${MAIN_SOURCES})
     set_target_properties(main PROPERTIES OUTPUT_NAME black)
 endif()
+add_dependencies(main build_info)
 # compat/ for the SDK's x86 header, the SDK harness's for the Winsock and DXGI names its portable runtime uses
 target_include_directories(main PRIVATE ${NATIVE}/compat ${SDK}/harness/compat ${NATIVE} ${GAME} ${SDK}/runtime ${GEN}
                            ${CMAKE_CURRENT_BINARY_DIR} ${glslang_SOURCE_DIR})
