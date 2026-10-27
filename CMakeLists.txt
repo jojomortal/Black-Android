@@ -124,6 +124,19 @@ set(MAIN_SOURCES ${RUNTIME_SOURCES} ${GAME_HOST_SOURCES} ${ANDROID_SOURCES} ${GE
     ${CMAKE_CURRENT_BINARY_DIR}/image_sha1.cpp ${CMAKE_CURRENT_BINARY_DIR}/europe_patch.cpp)
 if(ANDROID)
     add_library(main SHARED ${MAIN_SOURCES})
+elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    # an app bundle: Info.plist from ios/, the touch skin in its resources; signed afterwards by scripts/sign-ios.sh
+    set(SKIN_PNG ${REPO}/app/src/main/assets/skins/buttons.png)
+    set_source_files_properties(${SKIN_PNG} PROPERTIES MACOSX_PACKAGE_LOCATION skins)
+    add_executable(main MACOSX_BUNDLE ${MAIN_SOURCES} ${SKIN_PNG})
+    set_target_properties(main PROPERTIES
+        OUTPUT_NAME Black
+        MACOSX_BUNDLE_INFO_PLIST ${REPO}/ios/Info.plist.in
+        MACOSX_BUNDLE_GUI_IDENTIFIER com.muhammad.black
+        MACOSX_BUNDLE_SHORT_VERSION_STRING 0.1
+        MACOSX_BUNDLE_BUNDLE_VERSION 1
+        XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED NO
+        XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY 1)
 else()
     add_executable(main ${MAIN_SOURCES})
     set_target_properties(main PROPERTIES OUTPUT_NAME black)
@@ -152,21 +165,33 @@ if(ANDROID)
 else()
     # MoltenVK linked in, not loaded: SDL finds vkGetInstanceProcAddr in the executable. It is only pulled from the
     # archive if something asks for it, hence -u
-    set(MOLTENVK_PREFIX "" CACHE PATH "where MoltenVK's lib and the Vulkan headers are (Homebrew's molten-vk and vulkan-headers)")
-    find_library(MOLTENVK_LIB NAMES libMoltenVK.a MoltenVK HINTS ${MOLTENVK_PREFIX}/lib /opt/homebrew/opt/molten-vk/lib
-                 /usr/local/opt/molten-vk/lib REQUIRED)
-    find_path(VULKAN_HEADERS vulkan/vulkan.h HINTS ${MOLTENVK_PREFIX}/include /opt/homebrew/opt/vulkan-headers/include
-              /usr/local/opt/vulkan-headers/include REQUIRED)
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        # the official prebuilt package, scripts/fetch-deps.sh ios
+        set(MVK_IOS ${REPO}/third_party/MoltenVK-ios/MoltenVK/MoltenVK)
+        set(MOLTENVK_LIB ${MVK_IOS}/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a)
+        set(VULKAN_HEADERS ${MVK_IOS}/include)
+        if(NOT EXISTS ${MOLTENVK_LIB})
+            message(FATAL_ERROR "MoltenVK for iOS is missing: run scripts/fetch-deps.sh ios")
+        endif()
+    else()
+        set(MOLTENVK_PREFIX "" CACHE PATH "where MoltenVK's lib and the Vulkan headers are (Homebrew's molten-vk and vulkan-headers)")
+        find_library(MOLTENVK_LIB NAMES libMoltenVK.a MoltenVK HINTS ${MOLTENVK_PREFIX}/lib /opt/homebrew/opt/molten-vk/lib
+                     /usr/local/opt/molten-vk/lib REQUIRED)
+        find_path(VULKAN_HEADERS vulkan/vulkan.h HINTS ${MOLTENVK_PREFIX}/include /opt/homebrew/opt/vulkan-headers/include
+                  /usr/local/opt/vulkan-headers/include REQUIRED)
+    endif()
     target_include_directories(main SYSTEM PRIVATE ${VULKAN_HEADERS})
     target_link_libraries(main PRIVATE ${MOLTENVK_LIB} "-framework Metal" "-framework QuartzCore" "-framework IOSurface"
-                          "-framework IOKit" "-framework Foundation" "-framework CoreGraphics")
+                          "-framework Foundation" "-framework CoreGraphics")
     if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
         target_link_libraries(main PRIVATE "-framework UIKit")
     else()
-        target_link_libraries(main PRIVATE "-framework AppKit")
+        target_link_libraries(main PRIVATE "-framework IOKit" "-framework AppKit")
     endif()
     target_link_options(main PRIVATE -Wl,-u,_vkGetInstanceProcAddr)
-    # the touch controls' skin next to the executable
-    add_custom_command(TARGET main POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory
-                       ${REPO}/app/src/main/assets/skins $<TARGET_FILE_DIR:main>/skins)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        # the touch controls' skin next to the executable
+        add_custom_command(TARGET main POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory
+                           ${REPO}/app/src/main/assets/skins $<TARGET_FILE_DIR:main>/skins)
+    endif()
 endif()
