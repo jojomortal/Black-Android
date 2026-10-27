@@ -17,29 +17,43 @@ SDK checkout: `../XboxXBE-Recomp` at `99078b1` (picked up by CMake before FetchC
   `vm_remap(copy=FALSE)` onto the reservation, `mach_make_memory_entry_64` + `vm_map(FIXED|OVERWRITE)`, `shm_open` + `mmap`.
 - iOS SDK has no `mach_vm.h` (`#error`), so use the `vm_*` calls (`vm_allocate`, `vm_remap`, `vm_map`); `vm_address_t` is 64-bit on arm64.
 
-### Findings that change `memory.cpp` (shared runtime, **needs your OK before I touch it**)
+### Verified on the iPhone 15 (iPhone15,4, 5687 MB, iOS 27.0.1), Ad Hoc build, all four variants
 
-1. Host page is 16 KB (macOS arm64 and iPhone). `Commit` does `mprotect` on 4 KB guest pages: a range not aligned to
-   16 KB fails with `EINVAL` (measured). Commit/Decommit must round to host pages. Consequence: guest guard pages
-   smaller than 16 KB cannot be exact (stack guard in `AllocStack`), and `IsCommitted` bookkeeping stays 4 KB.
-2. `Decommit` uses `madvise(MADV_DONTNEED)`. On Darwin that does **not** zero (measured: page still `0xAB`). Needs
-   `mmap(MAP_FIXED|MAP_ANON|PROT_NONE)` over the range instead, which also zeroes.
-3. `memfd_create` does not exist: replace with one of the aliasing methods above.
+| variant | 4 GB PROT_NONE reserve | vm_remap | memory entry + vm_map | shm_open | available memory at start |
+|---|---|---|---|---|---|
+| none | ok | coherent | coherent | EPERM (sandbox) | 3067 MB |
+| eva  | ok | coherent | coherent | EPERM | 3067 MB |
+| iml  | ok | coherent | coherent | EPERM | 4091 MB |
+| both | ok | coherent | coherent | EPERM | 4091 MB |
 
-### NOT verified (needs the phone)
+- The profile for `TEAMID.com.example.memtest` grants **both** capabilities and the signed entitlements of each
+  variant matched (printed by `build-ios.sh --sign`). So the team can grant both.
+- Reserving 4 GB of `PROT_NONE` works with **no** entitlement (reserved address space is not counted by jetsam). Extended
+  Virtual Addressing changes nothing measurable here, so the real app does not need it; it only raises the limit on
+  *accessible* address space, which the guest does not come near (64 MB RAM + commits).
+- Increased Memory Limit raises the jetsam headroom from ~3.0 GB to ~4.0 GB (`os_proc_available_memory`). Use it.
+- `shm_open` is denied by the sandbox: it can't be the aliasing method. `vm_remap` and a memory entry both work; the
+  patch uses the memory entry (no source mapping to keep, port released after mapping).
+- Base is ignored hint: `0x7000000000` on the phone.
+- 16 KB host pages: `mprotect` of a 4 KB range not 16 KB aligned fails (EINVAL); `MADV_DONTNEED` does not zero.
+- Launch trap, not memory related: iOS 27 kills an app without the UIScene lifecycle
+  (`UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`, SIGTRAP). The real app must adopt it
+  (check what SDL 3.4.16 does on iOS in Phase 3).
+- `devicectl device copy from --domain-type appDataContainer` works on the Ad Hoc build (Documents/ readback).
 
-- Whether iOS lets the app reserve 4 GB at all, with and without `extended-virtual-addressing` / `increased-memory-limit`.
-- Whether `shm_open` is allowed by the iOS sandbox (expect the mach methods to be the safe choice).
-- `os_proc_available_memory()` / jetsam headroom on the iPhone 15 (6 GB RAM).
-- The device showed as **offline** in `xctrace` (locked / not trusted / not paired?), and I did not try to sign anything.
+### SDK patch `patches/sdk/0001-memory-darwin.patch` (on 99078b1, `kernel/memory.cpp`, additions under `__APPLE__` only)
 
-### Entitlements and sideloading (from general knowledge, not tested here)
-
-- Both entitlements are provisioning-profile capabilities. A paid Apple Developer team can enable them on an
-  App ID; a free Personal Team cannot (Xcode strips/rejects them). Sideload tools using a free account behave the
-  same way. Which of the two your setup can grant depends on the account, so the answer is pending (see open questions).
+- RAM: one `mach_make_memory_entry_64` mapped at both windows with `vm_map(FIXED|OVERWRITE)`; the port is released after.
+- `Commit`: `mprotect` rounded out to host pages (`sysconf(_SC_PAGESIZE)`).
+- `Decommit`: clears the 4 KB bits, then releases only host pages with no committed guest page, by remapping them
+  `MAP_FIXED|MAP_ANON|MAP_NORESERVE` `PROT_NONE` (zeroes). Neighbours stay.
+- Windows and the generic Unix/Android path are unchanged. Tested on macOS with the real memory.cpp (aliasing, odd
+  4 KB commits, neighbour survives, release faults, recommit reads zero). Not yet run on the phone inside the game.
+- Side effect: the guest cannot have a guard smaller than 16 KB; `AllocStack`'s 64 KB guard is fine.
+- Apply to a sibling checkout with `git -C ../XboxXBE-Recomp apply ../Black-Android/patches/sdk/0001-memory-darwin.patch`;
+  CMake wiring for the FetchContent case comes in Phase 2.
 
 ## Open questions
 
 - Signing decided: the Apple Distribution identity of the developer account, manual, Ad Hoc profiles. iPhone UDID `<device UDID>` (devicectl: paired, available).
-- Dev portal: one App ID `com.muhammad.memtest` with both capabilities + one Ad Hoc profile; variants sign a subset of what the profile grants.
+- Dev portal (done): one App ID `com.muhammad.memtest` with both capabilities + one Ad Hoc profile; variants sign a subset of what the profile grants.
