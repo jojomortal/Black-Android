@@ -228,3 +228,18 @@ logs hits and misses every 5 s. Reads the map from `BLACK_HD_MAP` or the bundle 
 - The SDK's format ids (`gpu/texture.cpp`: P8 0x0B, DXT1 0x0C, DXT3 0x0E, DXT5 0x0F) equal the map's format column; no conversion.
 - Map: `textures/black-hd-reimagined.map` from portingpete/Black-2006-Recomp (MIT, licence copied beside it). Pack files are never committed.
 - Result so far: title and menus only (DXT5 3/3 hit, DXT3 0/2); the first mission is not measured yet.
+
+Step 2 (render). `hd::Find` keys a texture, `hd::Load` prepares the pack file, `VulkanBackend::UploadHdTexture` swaps it in at the
+game texture's binding (the game's coordinates are normalised, so a different size fits).
+- Setting: `textures` in black.toml, options menu Graphics > Quality > TEXTURES (ORIGINAL / HD), default ORIGINAL. It takes
+  effect at the next bind of each texture, no restart: the setting is part of a texture's staleness signature. `BLACK_TEXTURES=hd|original`
+  overrides it for a run. Original is the old path untouched (the HD branch is only taken when a map entry matches and the pack is there).
+- Pack folder: `BLACK_HD_PACK`, else `hd/` in the game folder (Documents/Black/hd on iOS); any layout, files found by name.
+- DDS (DXT1/3/5) is uploaded as it is when the GPU has BC (the pack's own mips); without BC each level is decoded to BGRA on the CPU.
+  PNG: SDL_LoadPNG, box-filtered mip chain, BGRA. PS2 alpha (biggest 32x32 cell average of alpha <= 130): BC3 end points doubled, PNG alpha doubled, as the reference does.
+- No-BC devices keep the memory sane by leaving out levels bigger than 512 px (`BLACK_HD_MAX=<n>`, 0 for none; it is a preview, step 3's budget replaces it).
+  19 map entries are single-level files over 512 px: with the limit they fall back to the original texture (logged as "cannot use").
+- `BLACK_HD_SELFTEST=<max side>` loads every map entry once at start. Mac, no limit: 1161 of 1161 load, 6.7 s, 4555 MB of image data in all
+  (it counts files shared by several game textures every time). Limit 512: 1142 load, 422 MB.
+- The build version in the log is written by `cmake/build_info.cmake` before every build (`-dirty` when tracked files differ from HEAD).
+- Not yet seen: the first mission with HD on (needs a play-through); pack alpha on glass/effects is the thing to look at.
