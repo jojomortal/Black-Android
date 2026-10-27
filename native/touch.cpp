@@ -1128,6 +1128,7 @@ bool OnEvent(const SDL_Event& e) {
         case SDL_EVENT_FINGER_MOTION:
         case SDL_EVENT_FINGER_UP:
         case SDL_EVENT_FINGER_CANCELED: {
+            if (!platform::AcceptsFinger(e.tfinger.touchID)) return false;
             g_touch_ms = NowMs();
             float x = e.tfinger.x * Width(), y = e.tfinger.y * Height();
             std::lock_guard lock(g_lock);
@@ -1479,7 +1480,7 @@ void Draw() {
     std::lock_guard lock(g_lock);
     EnsureLayout();
     bool editing = g_editing;
-    if (!editing && !Shown()) return;
+    if (!editing && (!platform::TouchControls() || !Shown())) return;
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     float h = Height();
     float th = std::max(2.0f, h / 360.0f);

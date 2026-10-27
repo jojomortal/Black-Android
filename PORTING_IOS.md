@@ -110,6 +110,15 @@ Windowed mode could not be checked reliably by screenshot (the window kept endin
 also for the plain main-thread presenter): **please look at windowed mode** (`display_mode = 'windowed'` in
 `out/run-data/black.toml`).
 
+### Running on the Mac
+
+From the repo root: `scripts/run-mac.sh` (fullscreen; game from `../Black (USA)`, settings/saves/logs in `out/run-data`).
+`BLACK_WINDOWED=1 scripts/run-mac.sh` gives a resizable 1280x720 window (its green button goes native fullscreen);
+`display_mode = 'windowed'` in `out/run-data/black.toml` does the same, `BLACK_FULLSCREEN=1` wins over the setting.
+`BLACK_FORCE_NO_BC=1` forces the CPU DXT path. Extra logging: rebuild with `-DBLACK_VERBOSE_LOG=ON`, run with
+`BLACK_DEBUG_PRESENT=1`. The touch controls show on macOS only while a direct touch device is present (the trackpad is
+an indirect one and its fingers are ignored); always on Android and iOS.
+
 ### Verified on the Mac (M1 Pro, macOS 26.7.1)
 
 - Boots from the ISO, SHA1 matches, no unresolved kernel imports, guest space reserved through the patched `memory.cpp`,

@@ -71,6 +71,29 @@ void RedirectLog() {
 
 void SetHints() {}
 
+// iOS: the screen. macOS: fullscreen, or a resizable window (its green button goes fullscreen) when display_mode is
+// 'windowed' in the settings or BLACK_WINDOWED=1; BLACK_FULLSCREEN=1 wins over the setting
+void WindowSetup(SDL_WindowFlags& flags, int& width, int& height) {
+#if TARGET_OS_IPHONE
+    flags |= SDL_WINDOW_FULLSCREEN;
+#else
+    auto on = [](const char* name) {
+        const char* v = std::getenv(name);
+        return v && *v && *v != '0';
+    };
+    bool windowed = app::Get().display_mode == app::DisplayMode::Windowed;
+    if (on("BLACK_WINDOWED")) windowed = true;
+    if (on("BLACK_FULLSCREEN")) windowed = false;
+    if (windowed) {
+        flags |= SDL_WINDOW_RESIZABLE;
+        width = 1280;
+        height = 720;
+    } else {
+        flags |= SDL_WINDOW_FULLSCREEN;
+    }
+#endif
+}
+
 fs::path DataDir() {
     if (fs::path p = Env("BLACK_DATA_DIR"); !p.empty()) {
         std::error_code ec;
@@ -165,6 +188,29 @@ bool SurfaceReady(SDL_Window* window) { return window != nullptr; }
 fs::path AssetPath(const char* relative) {
     const char* base = SDL_GetBasePath();
     return (base ? fs::path(base) : fs::path()) / relative;
+}
+
+// a Mac has no touch screen, but its trackpad reports fingers to SDL as an indirect touch device
+bool TouchControls() {
+#if TARGET_OS_IPHONE
+    return true;
+#else
+    int n = 0;
+    bool direct = false;
+    if (SDL_TouchID* ids = SDL_GetTouchDevices(&n)) {
+        for (int i = 0; i < n && !direct; i++) direct = SDL_GetTouchDeviceType(ids[i]) == SDL_TOUCH_DEVICE_DIRECT;
+        SDL_free(ids);
+    }
+    return direct;
+#endif
+}
+
+bool AcceptsFinger(uint64_t touch_id) {
+#if TARGET_OS_IPHONE
+    return true;
+#else
+    return SDL_GetTouchDeviceType(touch_id) == SDL_TOUCH_DEVICE_DIRECT;
+#endif
 }
 
 void MergeLooseController(input::Pad&) {}

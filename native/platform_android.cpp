@@ -109,6 +109,8 @@ std::vector<fs::path> RemovableFolders() {
 
 void RedirectLog() { LogToLogcat(); }
 
+void WindowSetup(SDL_WindowFlags& flags, int&, int&) { flags |= SDL_WINDOW_FULLSCREEN; }
+
 void SetHints() { SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1"); }
 
 // app-specific external storage: the player can reach the logs, saves and settings over USB
@@ -155,6 +157,9 @@ bool SurfaceReady(SDL_Window* window) {
     SDL_PropertiesID props = SDL_GetWindowProperties(window);
     return SDL_GetPointerProperty(props, SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr) != nullptr;
 }
+
+bool TouchControls() { return true; }
+bool AcceptsFinger(uint64_t) { return true; }
 
 // the APK's assets: SDL opens them by their relative name
 fs::path AssetPath(const char* relative) { return relative; }

@@ -325,7 +325,10 @@ int main(int, char**) {
     app::LogSystem();
 
     std::string title = Utf8(app::kGame.title);
-    g_window = SDL_CreateWindow(title.c_str(), 0, 0, SDL_WINDOW_FULLSCREEN | SDL_WINDOW_VULKAN | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+    SDL_WindowFlags window_flags = SDL_WINDOW_VULKAN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+    int window_w = 0, window_h = 0;
+    platform::WindowSetup(window_flags, window_w, window_h);
+    g_window = SDL_CreateWindow(title.c_str(), window_w, window_h, window_flags);
     if (!g_window) {
         LOGE("app: no window: %s", SDL_GetError());
         return 1;

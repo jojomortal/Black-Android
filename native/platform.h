@@ -6,6 +6,7 @@
 #include <vector>
 
 struct SDL_Window;
+typedef uint64_t SDL_WindowFlags;
 
 namespace input {
 struct Pad;
@@ -21,6 +22,8 @@ void SetHints();
 std::filesystem::path DataDir();
 // where the game files or a disc image are looked for, in this order
 std::vector<std::filesystem::path> GameFolders();
+// the window's flags and size (0 for the display's): the phones' window is the screen, a Mac's can be a window
+void WindowSetup(SDL_WindowFlags& flags, int& width, int& height);
 // the log line for no game found, once; the place to look and what the player does about it
 void LogGameMissing();
 // the device, CPU and RAM lines of the log's header
@@ -33,6 +36,10 @@ void DestroyVulkanSurface(VkInstance instance, VkSurfaceKHR surface);
 bool SurfaceReady(SDL_Window* window);
 // a file shipped with the app (the touch controls' skin), as a path SDL can open
 std::filesystem::path AssetPath(const char* relative);
+// the touch controls are for a touch screen: always on a phone, on a Mac only while a direct touch device is present
+bool TouchControls();
+// a finger event of this touch device (SDL_TouchID) is the player's: not a Mac trackpad's
+bool AcceptsFinger(uint64_t touch_id);
 // a controller the OS hands over without a device, on top of what SDL read of port 0 (Android's game services)
 void MergeLooseController(input::Pad& pad);
 
