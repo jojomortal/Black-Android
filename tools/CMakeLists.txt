@@ -1,5 +1,5 @@
-# The x86 to C++ recompiler alone, for build.bat: Clang (clang-cl) with the MSVC headers and linker, so the
-# build needs Visual Studio's C++ tools but not its Clang component
+# The x86 to C++ recompiler alone, for build.bat (Clang with the MSVC headers and linker, so the build needs
+# Visual Studio's C++ tools but not its Clang component) and scripts/build-apple.sh (Apple clang)
 
 cmake_minimum_required(VERSION 3.22)
 project(xbe_recomp_tool C CXX)
