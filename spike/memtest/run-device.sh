@@ -6,8 +6,8 @@ V=${1:?variant}
 DEV=<device UDID>
 mkdir -p results
 xcrun devicectl device install app --device $DEV build/$V/Memtest.app
-xcrun devicectl device process launch --device $DEV --terminate-existing com.mian.memtest || true
+xcrun devicectl device process launch --device $DEV --terminate-existing com.muhammad.memtest || true
 sleep 4
-xcrun devicectl device copy from --device $DEV --domain-type appDataContainer --domain-identifier com.mian.memtest \
+xcrun devicectl device copy from --device $DEV --domain-type appDataContainer --domain-identifier com.muhammad.memtest \
     --source Documents/memtest-$V.txt --destination results/memtest-$V.txt && cat results/memtest-$V.txt \
     || echo "copy failed: read it on screen or in Files > Memtest"

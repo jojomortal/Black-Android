@@ -16,7 +16,7 @@
     NSString* docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
     [text writeToFile:[docs stringByAppendingPathComponent:[NSString stringWithFormat:@"memtest-%@.txt", variant]]
            atomically:YES encoding:NSUTF8StringEncoding error:nil];
-    os_log_t log = os_log_create("com.mian.memtest", "spike");
+    os_log_t log = os_log_create("com.muhammad.memtest", "spike");
     // %{public}s: the report would be <private> in the log otherwise
     os_log(log, "variant %{public}s\n%{public}s", variant.UTF8String, text.UTF8String);
     self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];

@@ -7,7 +7,7 @@ SDK checkout: `../XboxXBE-Recomp` at `99078b1` (picked up by CMake before FetchC
 
 `spike/memtest/build-ios.sh <none|eva|iml|both> [--sign]` builds a UIKit app that runs what
 `kernel/memory.cpp` needs and prints/saves the report (`Documents/memtest-<variant>.txt`, also on screen).
-`gen-ent.sh` writes the entitlements of a variant (Ad Hoc: app id, team id, get-task-allow=false + the capability keys); `run-device.sh` installs with devicectl and copies the report back; os_log subsystem `com.mian.memtest`. macOS runs the same code (`cli.c`).
+`gen-ent.sh` writes the entitlements of a variant (Ad Hoc: app id, team id, get-task-allow=false + the capability keys); `run-device.sh` installs with devicectl and copies the report back; os_log subsystem `com.muhammad.memtest`. macOS runs the same code (`cli.c`).
 
 ### Verified (macOS 26 arm64, 16 KB pages, no sandbox)
 
@@ -42,4 +42,4 @@ SDK checkout: `../XboxXBE-Recomp` at `99078b1` (picked up by CMake before FetchC
 ## Open questions
 
 - Signing decided: the Apple Distribution identity of the developer account, manual, Ad Hoc profiles. iPhone UDID `<device UDID>` (devicectl: paired, available).
-- Dev portal: one App ID `com.mian.memtest` with both capabilities + one Ad Hoc profile; variants sign a subset of what the profile grants.
+- Dev portal: one App ID `com.muhammad.memtest` with both capabilities + one Ad Hoc profile; variants sign a subset of what the profile grants.

@@ -6,7 +6,7 @@ set -e
 cd "$(dirname "$0")"
 V=${1:-none}
 TEAM=TEAMID
-BUNDLE_ID=com.mian.memtest
+BUNDLE_ID=com.muhammad.memtest
 ID="Apple Distribution: the developer account ($TEAM)"
 PROF=profiles/memtest.mobileprovision
 SDK=$(xcrun --sdk iphoneos --show-sdk-path)
@@ -37,12 +37,14 @@ cat > "$APP/Info.plist" <<P
 P
 if [ "$2" != "--sign" ]; then echo "built unsigned $APP"; exit 0; fi
 [ -f "$PROF" ] || { echo "missing $PROF" >&2; exit 1; }
+security cms -D -i "$PROF" > build/$V/profile.plist
+GOT=$(plutil -extract Entitlements.application-identifier raw -o - build/$V/profile.plist)
+[ "$GOT" = "$TEAM.$BUNDLE_ID" ] || { echo "profile is for $GOT, expected $TEAM.$BUNDLE_ID" >&2; exit 1; }
 cp "$PROF" "$APP/embedded.mobileprovision"
 ./gen-ent.sh $V $TEAM $BUNDLE_ID > build/$V/ent.plist
 codesign -f -s "$ID" --entitlements build/$V/ent.plist "$APP"
 echo "== entitlements of $APP (variant $V) =="
 codesign -d --entitlements :- "$APP" 2>/dev/null
 echo "== profile: app id, device count, entitlements it grants =="
-security cms -D -i "$PROF" > build/$V/profile.plist
 plutil -extract Entitlements xml1 -o - build/$V/profile.plist | grep -E "application-identifier|kernel|get-task-allow" || true
 plutil -extract ProvisionedDevices raw -o - build/$V/profile.plist
