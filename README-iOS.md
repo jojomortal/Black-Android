@@ -64,10 +64,10 @@ the HD textures on, about 9 minutes, 61 fps); see *Known limits*. Free profiles 
 
 **Bundle id.** Set `BUNDLE_ID` in `ios/signing.local.env`: an App ID belongs to one team, so you cannot sign with
 the example's default (`com.muhammad.black`, the author's); register your own (for example `com.yourname.black`) and put it
-in the profile and in the file. The sign script writes it into the app. The folder where the app keeps its saves, settings and
-logs is fixed (`Library/Application Support/com.muhammad/Black`, by the app's code, not the bundle id), so changing the id
-between builds does not lose saves, but a new id installs as a different app: it starts with its own Documents (the game
-files), and `install-ios.sh game` or the Files app has to put them there again.
+in the profile and in the file. The sign script writes it into the app. The folder name inside the app where it keeps
+saves, settings and logs is fixed (`Library/Application Support/com.muhammad/Black`, set in the code, not taken from the bundle
+id). That does not carry saves between ids: a new bundle id is a new app with its own container, so it starts with no game
+files and no saves; copy the game in again (`install-ios.sh game` or the Files app). Keeping one id across builds keeps everything.
 
 ## Game files
 
