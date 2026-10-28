@@ -56,10 +56,18 @@ bundle id, identity, profile, device), then:
 ```
 
 A free account cannot grant Increased Memory Limit, so the app gets the default memory limit of iOS (about 3 GB on a
-6 GB iPhone instead of about 4 GB). It starts and plays; see *Known limits*. Free profiles also expire after 7 days.
+6 GB iPhone instead of about 4 GB). That is enough: **tested on level_01, the footprint stayed around 410 MB at its peak** (with
+the HD textures on, about 9 minutes, 61 fps); see *Known limits*. Free profiles also expire after 7 days.
 
 **3. Xcode.** `ios/signing.local.env` is only for the scripts; you can instead open the generated project
 (`out/build/ios/black_android.xcodeproj`), set your team and bundle id on the `main` target and run it.
+
+**Bundle id.** Set `BUNDLE_ID` in `ios/signing.local.env`: an App ID belongs to one team, so you cannot sign with
+the example's default (`com.muhammad.black`, the author's); register your own (for example `com.yourname.black`) and put it
+in the profile and in the file. The sign script writes it into the app. The folder where the app keeps its saves, settings and
+logs is fixed (`Library/Application Support/com.muhammad/Black`, by the app's code, not the bundle id), so changing the id
+between builds does not lose saves, but a new id installs as a different app: it starts with its own Documents (the game
+files), and `install-ios.sh game` or the Files app has to put them there again.
 
 ## Game files
 
@@ -83,7 +91,7 @@ pack's files are decoded on the CPU and levels bigger than 512 px are left out (
 
 - Tested on one device. Long play (an hour and a half, HD on) held with Increased Memory Limit; a free Apple ID's signature
   has not been played for as long.
-- HD textures: about half of the game's textures have a counterpart in the pack. 512 px at most on the iPhone for now.
+- HD textures: about half of the game's textures have a counterpart in the pack. 1024 px at most on the iPhone for now.
 - The Android code in this branch has only been syntax-checked, not built. **Android users should use
   [upstream](https://github.com/RanggaCasper/Black-Android).**
 - Not tried: the Europe disc, the iPad, the PlayStation button prompts (controllers work, the prompts show Xbox names).
