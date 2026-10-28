@@ -218,6 +218,90 @@ void Downsample(const uint8_t* src, uint32_t w, uint32_t h, uint8_t* dst) {
         }
 }
 
+// one level of BC1/2/3 to BGRA, w x h texels (only for files that have to be scaled down, so it is not fast)
+void DecodeBc(Image::Format f, const uint8_t* s, uint32_t w, uint32_t h, uint8_t* out) {
+    auto expand = [](unsigned c, unsigned bits) { return bits == 5 ? (c << 3 | c >> 2) : (c << 2 | c >> 4); };
+    uint32_t bw = (w + 3) / 4, bh = (h + 3) / 4;
+    for (uint32_t by = 0; by < bh; by++)
+        for (uint32_t bx = 0; bx < bw; bx++, s += BlockBytes(f)) {
+            const uint8_t* cb = f == Image::BC1 ? s : s + 8;
+            unsigned c0 = cb[0] | cb[1] << 8, c1 = cb[2] | cb[3] << 8;
+            unsigned col[4][4];  // b g r a
+            auto set = [&](int i, unsigned r, unsigned g, unsigned b, unsigned a) {
+                col[i][0] = b, col[i][1] = g, col[i][2] = r, col[i][3] = a;
+            };
+            unsigned r0 = expand(c0 >> 11, 5), g0 = expand((c0 >> 5) & 63, 6), b0 = expand(c0 & 31, 5);
+            unsigned r1 = expand(c1 >> 11, 5), g1 = expand((c1 >> 5) & 63, 6), b1 = expand(c1 & 31, 5);
+            set(0, r0, g0, b0, 255);
+            set(1, r1, g1, b1, 255);
+            if (c0 > c1 || f != Image::BC1) {
+                set(2, (2 * r0 + r1) / 3, (2 * g0 + g1) / 3, (2 * b0 + b1) / 3, 255);
+                set(3, (r0 + 2 * r1) / 3, (g0 + 2 * g1) / 3, (b0 + 2 * b1) / 3, 255);
+            } else {
+                set(2, (r0 + r1) / 2, (g0 + g1) / 2, (b0 + b1) / 2, 255);
+                set(3, 0, 0, 0, 0);
+            }
+            uint32_t idx = cb[4] | cb[5] << 8 | cb[6] << 16 | uint32_t(cb[7]) << 24;
+            unsigned alpha[16];
+            for (int i = 0; i < 16; i++) alpha[i] = 255;
+            if (f == Image::BC2) {
+                for (int i = 0; i < 16; i++) alpha[i] = ((s[i / 2] >> (4 * (i & 1))) & 15) * 17;
+            } else if (f == Image::BC3) {
+                unsigned a0 = s[0], a1 = s[1], pal[8];
+                uint64_t bits = 0;
+                for (int i = 0; i < 6; i++) bits |= uint64_t(s[2 + i]) << (8 * i);
+                pal[0] = a0;
+                pal[1] = a1;
+                if (a0 > a1) for (unsigned i = 1; i < 7; i++) pal[1 + i] = ((7 - i) * a0 + i * a1) / 7;
+                else {
+                    for (unsigned i = 1; i < 5; i++) pal[1 + i] = ((5 - i) * a0 + i * a1) / 5;
+                    pal[6] = 0;
+                    pal[7] = 255;
+                }
+                for (int i = 0; i < 16; i++, bits >>= 3) alpha[i] = pal[bits & 7];
+            }
+            for (uint32_t i = 0; i < 16; i++) {
+                uint32_t x = bx * 4 + i % 4, y = by * 4 + i / 4;
+                if (x >= w || y >= h) continue;
+                const unsigned* c = col[(idx >> (2 * i)) & 3];
+                uint8_t* o = out + (size_t(y) * w + x) * 4;
+                o[0] = uint8_t(c[0]);
+                o[1] = uint8_t(c[1]);
+                o[2] = uint8_t(c[2]);
+                o[3] = f == Image::BC1 ? uint8_t(c[3]) : uint8_t(alpha[i]);
+            }
+        }
+}
+
+// BGRA texels of the top level, brought down to max_side and given the chain of levels below
+void FillBgraChain(std::vector<uint8_t> px, uint32_t w, uint32_t h, uint32_t max_side, Image& out) {
+    std::vector<uint8_t> next;
+    while (max_side && std::max(w, h) > max_side) {
+        next.resize(size_t(std::max(w / 2, 1u)) * std::max(h / 2, 1u) * 4);
+        Downsample(px.data(), w, h, next.data());
+        px.swap(next);
+        w = std::max(w / 2, 1u);
+        h = std::max(h / 2, 1u);
+    }
+    out.format = Image::BGRA8;
+    out.width = w;
+    out.height = h;
+    out.levels = 0;
+    out.offset.clear();
+    out.data.clear();
+    for (;;) {
+        out.offset.push_back(out.data.size());
+        out.data.insert(out.data.end(), px.begin(), px.end());
+        out.levels++;
+        if (w == 1 && h == 1) break;
+        next.resize(size_t(std::max(w / 2, 1u)) * std::max(h / 2, 1u) * 4);
+        Downsample(px.data(), w, h, next.data());
+        px.swap(next);
+        w = std::max(w / 2, 1u);
+        h = std::max(h / 2, 1u);
+    }
+}
+
 bool LoadDds(const std::vector<uint8_t>& file, uint32_t max_side, Image& out) {
     if (file.size() < 128 || std::memcmp(file.data(), "DDS ", 4)) return false;
     const uint8_t* hd = file.data();
@@ -251,7 +335,18 @@ bool LoadDds(const std::vector<uint8_t>& file, uint32_t max_side, Image& out) {
     // the biggest levels dropped while they pass max_side; a file with one level has nothing smaller to use
     uint32_t skip = 0;
     while (max_side && skip + 1 < levels && (std::max(w >> skip, h >> skip) > max_side)) skip++;
-    if (max_side && std::max(w >> skip, h >> skip) > max_side) return false;
+    if (max_side && std::max(w >> skip, h >> skip) > max_side) {
+        // a file without the smaller levels: decoded, scaled down to the cap and given its own chain
+        std::vector<uint8_t> top(file.begin() + at[skip], file.begin() + at[skip] + len[skip]);
+        if (ps2) Bc3DoubleAlpha(top.data(), top.size());
+        uint32_t tw = std::max(w >> skip, 1u), th = std::max(h >> skip, 1u);
+        std::vector<uint8_t> px(size_t(tw) * th * 4);
+        DecodeBc(f, top.data(), tw, th, px.data());
+        out.file_width = w;
+        out.file_height = h;
+        FillBgraChain(std::move(px), tw, th, max_side, out);
+        return true;
+    }
     out.format = f;
     out.file_width = w;
     out.file_height = h;
@@ -279,33 +374,9 @@ bool LoadPng(const fs::path& path, uint32_t max_side, Image& out) {
     SDL_DestroySurface(s);
     if (Ps2Alpha(px.data() + 3, w, h, size_t(w) * 4, 4))
         for (size_t i = 3; i < px.size(); i += 4) px[i] = uint8_t(std::min(px[i] * 2u, 255u));
-    out.format = Image::BGRA8;
     out.file_width = w;
     out.file_height = h;
-    // smaller than max_side first, then the chain down to 1x1
-    std::vector<uint8_t> next;
-    while (max_side && std::max(w, h) > max_side) {
-        next.resize(size_t(std::max(w / 2, 1u)) * std::max(h / 2, 1u) * 4);
-        Downsample(px.data(), w, h, next.data());
-        px.swap(next);
-        w = std::max(w / 2, 1u);
-        h = std::max(h / 2, 1u);
-    }
-    out.width = w;
-    out.height = h;
-    out.levels = 0;
-    out.data.clear();
-    for (;;) {
-        out.offset.push_back(out.data.size());
-        out.data.insert(out.data.end(), px.begin(), px.end());
-        out.levels++;
-        if (w == 1 && h == 1) break;
-        next.resize(size_t(std::max(w / 2, 1u)) * std::max(h / 2, 1u) * 4);
-        Downsample(px.data(), w, h, next.data());
-        px.swap(next);
-        w = std::max(w / 2, 1u);
-        h = std::max(h / 2, 1u);
-    }
+    FillBgraChain(std::move(px), w, h, max_side, out);
     return true;
 }
 

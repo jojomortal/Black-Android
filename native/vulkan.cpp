@@ -2777,8 +2777,9 @@ bool VulkanBackend::UploadHdTexture(Tex& tx, const TextureDesc& d, int entry, ui
         const char* e = std::getenv("BLACK_HD_MAX");
         return e ? uint32_t(std::strtoul(e, nullptr, 10)) : ~0u;
     }();
-    // no BC: every level is BGRA, so the biggest ones are left out unless BLACK_HD_MAX says otherwise (0: none)
-    uint32_t max_side = env_max != ~0u ? env_max : bc_ ? 0 : 512;
+    // no BC: every level is BGRA, so the biggest ones are left out (a file with one level is scaled down) unless
+    // BLACK_HD_MAX says otherwise (0: none)
+    uint32_t max_side = env_max != ~0u ? env_max : bc_ ? 0 : 1024;
     hd::Image im;
     if (!hd::Load(entry, max_side, im)) return false;
     bool compressed = im.format != hd::Image::BGRA8;
