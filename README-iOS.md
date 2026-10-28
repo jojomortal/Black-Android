@@ -17,7 +17,8 @@ Other devices have not been tried.
 ## What you need
 
 - A Mac with Apple Silicon and Xcode (command line tools and the iOS SDK), `brew install cmake ninja molten-vk vulkan-headers python3`.
-- The USA disc image of *Black*.
+- The USA disc image of *Black*, and `git` with network access: the builds download SDL3, MoltenVK, glslang, toml++, Dear ImGui and
+  the SDK from GitHub (a few hundred MB, the first configure takes several minutes).
 - A way to sign the app (see below), and an iPhone running iOS 16 or later.
 
 ## Build
@@ -27,7 +28,7 @@ git clone https://github.com/mianmuhammadse/Black-Android.git && cd Black-Androi
 git checkout ios
 ./scripts/build-apple.sh                   # recompiles default.xbe from your ISO into generated/game (about 5 s once the tools are built)
 ./scripts/fetch-deps.sh ios                # SDL3 and MoltenVK for iOS
-./scripts/apply-sdk-patches.sh             # two small patches to the SDK checkout beside the repo (../XboxXBE-Recomp)
+./scripts/apply-sdk-patches.sh             # clones the SDK to ../XboxXBE-Recomp (beside the repo) at the pinned commit and patches it
 cmake -S . -B out/build/ios -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITECTURES=arm64 \
       -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 -DBLACK_VERBOSE_LOG=ON
 cmake --build out/build/ios --config Release --target main     # the first build takes 15 minutes or more
