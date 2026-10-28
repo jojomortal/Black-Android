@@ -64,7 +64,7 @@ A free account cannot grant Increased Memory Limit, so the app gets the default 
 ## Game files
 
 Open the **Files** app, **On My iPhone**, **Black**, and put the ISO (or `default.xbe` with its files) in a folder named
-`Black`. The app creates it at the first start. From the Mac: `./scripts/install-ios.sh game "Black (USA).iso"`.
+`Black` (make it if it is not there; the app lists the folders it looked in in its log when it finds no game). From the Mac: `./scripts/install-ios.sh game "Black (USA).iso"`.
 Saves and settings stay in the app's folder when you install a new build over the old one, with the same bundle id.
 
 ## HD textures (optional)
