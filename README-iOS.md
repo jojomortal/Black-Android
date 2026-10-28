@@ -56,8 +56,9 @@ bundle id, identity, profile, device), then:
 ```
 
 A free account cannot grant Increased Memory Limit, so the app gets the default memory limit of iOS (about 3 GB on a
-6 GB iPhone instead of about 4 GB). That is enough: **tested on level_01, the footprint stayed around 410 MB at its peak** (with
-the HD textures on, about 9 minutes, 61 fps); see *Known limits*. Free profiles also expire after 7 days.
+6 GB iPhone instead of about 4 GB). That is enough: **tested on level_01 for 10 minutes with the HD textures on at 1024 px: the
+footprint peaked at about 740 MB (about 410 MB with the 512 px cap) and the frame rate held 61 fps**, with a short hitch when a
+batch of new HD textures loads; see *Known limits*. Free profiles also expire after 7 days.
 
 **3. Xcode.** `ios/signing.local.env` is only for the scripts; you can instead open the generated project
 (`out/build/ios/black_android.xcodeproj`), set your team and bundle id on the `main` target and run it.
