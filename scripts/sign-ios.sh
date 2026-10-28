@@ -8,7 +8,9 @@ cd "$(dirname "$0")/.."
 APP_IN=${1:-out/build/ios/Release-iphoneos/Black.app}
 CONF=ios/signing.local.env
 [ -f "$CONF" ] || { echo "missing $CONF: copy ios/signing.local.env.example and fill it in" >&2; exit 1; }
+WANT_IML=$INCREASED_MEMORY_LIMIT  # a value given on the command line wins over the file
 . "./$CONF"
+INCREASED_MEMORY_LIMIT=${WANT_IML:-$INCREASED_MEMORY_LIMIT}
 : "${TEAM:?TEAM in $CONF}" "${BUNDLE_ID:?BUNDLE_ID in $CONF}" "${IDENTITY:?IDENTITY in $CONF}"
 PROF=${PROFILE:-ios/profiles/black.mobileprovision}
 IML=${INCREASED_MEMORY_LIMIT:-1}
