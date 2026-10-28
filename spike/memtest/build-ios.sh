@@ -5,9 +5,9 @@
 set -e
 cd "$(dirname "$0")"
 V=${1:-none}
-TEAM=TEAMID
-BUNDLE_ID=com.muhammad.memtest
-ID="Apple Distribution: the developer account ($TEAM)"
+. ../../ios/signing.local.env
+BUNDLE_ID=$BUNDLE_ID.memtest
+ID=$IDENTITY
 PROF=profiles/memtest.mobileprovision
 SDK=$(xcrun --sdk iphoneos --show-sdk-path)
 APP=build/$V/Memtest.app

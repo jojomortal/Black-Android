@@ -4,8 +4,11 @@
 #   game: copy the ISO (or default.xbe) into the app's Documents/Black                  logs: copy the app's log folder here
 set -e
 cd "$(dirname "$0")/.."
-DEV=${BLACK_DEVICE:-<device UDID>}
-ID=com.muhammad.black
+CONF=ios/signing.local.env
+[ -f "$CONF" ] && . "./$CONF"
+DEV=${BLACK_DEVICE:-$DEVICE}
+ID=${BUNDLE_ID:?BUNDLE_ID in ios/signing.local.env}
+[ -n "$DEV" ] || { echo "DEVICE in ios/signing.local.env (xcrun devicectl list devices)" >&2; exit 1; }
 case "$1" in
     install) xcrun devicectl device install app --device $DEV out/ios/Black.app ;;
     run) # the app's stderr goes to os_log, not the console: read the log file with "logs"

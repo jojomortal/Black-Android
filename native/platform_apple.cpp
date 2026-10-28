@@ -19,6 +19,7 @@
 #include "core/log.h"
 
 #if TARGET_OS_IPHONE
+#include <CoreFoundation/CoreFoundation.h>
 #include <os/log.h>
 #include <os/proc.h>
 
@@ -53,6 +54,15 @@ fs::path Documents() {
 
 }  // namespace
 
+#if TARGET_OS_IPHONE
+// the id the app was signed with (scripts/sign-ios.sh sets it), for the log's subsystem
+std::string BundleId() {
+    char id[256] = "black";
+    if (CFStringRef s = CFBundleGetIdentifier(CFBundleGetMainBundle())) CFStringGetCString(s, id, sizeof(id), kCFStringEncodingUTF8);
+    return id;
+}
+#endif
+
 // iOS shows no stderr: the log's lines go to os_log, read with the Console or devicectl. On the Mac stderr is the terminal
 void RedirectLog() {
 #if TARGET_OS_IPHONE
@@ -61,7 +71,7 @@ void RedirectLog() {
     dup2(fds[1], STDERR_FILENO);
     close(fds[1]);
     std::thread([fd = fds[0]] {
-        os_log_t log = os_log_create("com.muhammad.black", "game");
+        os_log_t log = os_log_create(BundleId().c_str(), "game");
         char buf[1024];
         std::string line;
         for (ssize_t n; (n = read(fd, buf, sizeof(buf))) > 0;) {

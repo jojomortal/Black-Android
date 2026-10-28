@@ -3,11 +3,13 @@
 set -e
 cd "$(dirname "$0")"
 V=${1:?variant}
-DEV=<device UDID>
+. ../../ios/signing.local.env
+DEV=$DEVICE
+MEMTEST=$BUNDLE_ID.memtest
 mkdir -p results
 xcrun devicectl device install app --device $DEV build/$V/Memtest.app
-xcrun devicectl device process launch --device $DEV --terminate-existing com.muhammad.memtest || true
+xcrun devicectl device process launch --device $DEV --terminate-existing $MEMTEST || true
 sleep 4
-xcrun devicectl device copy from --device $DEV --domain-type appDataContainer --domain-identifier com.muhammad.memtest \
+xcrun devicectl device copy from --device $DEV --domain-type appDataContainer --domain-identifier $MEMTEST \
     --source Documents/memtest-$V.txt --destination results/memtest-$V.txt && cat results/memtest-$V.txt \
     || echo "copy failed: read it on screen or in Files > Memtest"

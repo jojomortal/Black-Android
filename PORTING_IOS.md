@@ -7,7 +7,7 @@ SDK checkout: `../XboxXBE-Recomp` at `99078b1` (picked up by CMake before FetchC
 
 `spike/memtest/build-ios.sh <none|eva|iml|both> [--sign]` builds a UIKit app that runs what
 `kernel/memory.cpp` needs and prints/saves the report (`Documents/memtest-<variant>.txt`, also on screen).
-`gen-ent.sh` writes the entitlements of a variant (Ad Hoc: app id, team id, get-task-allow=false + the capability keys); `run-device.sh` installs with devicectl and copies the report back; os_log subsystem `com.muhammad.memtest`. macOS runs the same code (`cli.c`).
+`gen-ent.sh` writes the entitlements of a variant (Ad Hoc: app id, team id, get-task-allow=false + the capability keys); `run-device.sh` installs with devicectl and copies the report back; os_log subsystem `com.example.memtest`. macOS runs the same code (`cli.c`).
 
 ### Verified (macOS 26 arm64, 16 KB pages, no sandbox)
 
@@ -148,7 +148,7 @@ Build (no signing needed to compile): `scripts/fetch-deps.sh && scripts/fetch-de
 and `cmake --build out/build/ios --config Release --target main` (first build ~15 min; configure ~6 min for the fetches).
 Result `out/build/ios/Release-iphoneos/Black.app`: arm64, platform iOS, minos 16.0, no dylibs besides system ones,
 `vkGetInstanceProcAddr` exported (SDL finds the linked-in MoltenVK with `dlsym`). Then
-`scripts/sign-ios.sh` (needs `ios/profiles/black.mobileprovision`, Ad Hoc, app id `TEAMID.com.example.black`;
+`scripts/sign-ios.sh` (needs `the profile named in ios/signing.local.env`, Ad Hoc, app id `TEAMID.com.example.black`;
 signs increased-memory-limit only, `WITH_EVA=1` adds extended-virtual-addressing) and `scripts/install-ios.sh install|run|game <iso>|logs`.
 
 - MoltenVK: the official v1.4.2 `MoltenVK-ios.tar` (sha256 pinned in fetch-deps.sh): a device-only `ios-arm64` static lib, no
@@ -165,7 +165,7 @@ signs increased-memory-limit only, `WITH_EVA=1` adds extended-virtual-addressing
   window on Android and the Mac). Untested on device.
 - Game files: Documents/Black (then Documents), `scripts/install-ios.sh game <iso>` copies an ISO there with devicectl.
   Settings, saves, logs and the shader cache are in the app's Application Support (`SDL_GetPrefPath`); logs go to os_log
-  (subsystem com.muhammad.black) as well. Both unverified.
+  (subsystem com.example.black) as well. Both unverified.
 
 ### iPhone 15 (A16, iOS 27.0.1) results so far
 
@@ -206,7 +206,7 @@ The audio session is `SoloAmbient` until SDL opens the device, then `Playback`.
 ## Decisions
 
 - Full 4 GB guest layout (approved after Phase 0). No smaller layout needed.
-- Real app bundle ID `com.muhammad.black`. Its App ID gets Increased Memory Limit **and** Extended Virtual Addressing
+- Real app bundle ID `com.example.black`. Its App ID gets Increased Memory Limit **and** Extended Virtual Addressing
   in the portal, with an Ad Hoc profile; the build signs **only** `increased-memory-limit`. EVA is the fallback to
   sign in if the reservation ever fails inside the full app (large binary + MoltenVK use address space the spike did not).
 - iOS 27 requires the UIScene lifecycle (see above); the real app's Info.plist needs `UIApplicationSceneManifest`.
@@ -218,7 +218,7 @@ The audio session is `SoloAmbient` until SDL opens the device, then `Playback`.
 ## Open questions
 
 - Signing decided: the Apple Distribution identity of the developer account, manual, Ad Hoc profiles. iPhone UDID `<device UDID>` (devicectl: paired, available).
-- Dev portal (done): one App ID `com.muhammad.memtest` with both capabilities + one Ad Hoc profile; variants sign a subset of what the profile grants.
+- Dev portal (done): one App ID `com.example.memtest` with both capabilities + one Ad Hoc profile; variants sign a subset of what the profile grants.
 
 ## HD textures (BLACK HD Reimagined)
 
@@ -243,3 +243,9 @@ game texture's binding (the game's coordinates are normalised, so a different si
   (it counts files shared by several game textures every time). Limit 512: 1142 load, 422 MB.
 - The build version in the log is written by `cmake/build_info.cmake` before every build (`-dirty` when tracked files differ from HEAD).
 - Not yet seen: the first mission with HD on (needs a play-through); pack alpha on glass/effects is the thing to look at.
+
+## Signing configuration
+Nothing account-specific is committed. `scripts/sign-ios.sh`, `install-ios.sh` and `spike/memtest/*` read `ios/signing.local.env`
+(gitignored; `ios/signing.local.env.example` lists the keys: TEAM, BUNDLE_ID, IDENTITY, PROFILE, DEVICE, INCREASED_MEMORY_LIMIT).
+The build carries a placeholder bundle id (`org.black.ios`); the sign script sets the real one in Info.plist, and the log's os_log
+subsystem follows it. The data folder name (`Library/Application Support/com.muhammad/Black`, SDL's pref path) is unchanged so existing saves stay.
