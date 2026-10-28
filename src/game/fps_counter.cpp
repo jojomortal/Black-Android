@@ -42,7 +42,11 @@ constexpr float kMargin = 8;
 constexpr float kGrey = 186 / 255.0f;  // the HUD's text
 
 // as SCDA: at rest it ends 80 in from the right, on the row of the menu's button legend
+#ifdef __APPLE__
+constexpr char kWatermark[] = "Black iOS";
+#else
 constexpr char kWatermark[] = "Black Android";
+#endif
 constexpr float kWatermarkRight = 80;
 constexpr float kWatermarkTop = 427;
 // the page's Main slides its legend in from the right and back out; x is the confirm prompt's at rest (frame 29)

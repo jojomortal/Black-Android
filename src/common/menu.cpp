@@ -345,6 +345,9 @@ struct Credit {
 constexpr Credit kCredits[] = {
     {"CONTRIBUTORS", nullptr, nullptr},
     {"Rangga Casper", "ANDROID PORT", "https://github.com/RanggaCasper"},
+#ifdef __APPLE__
+    {"Mian Muhammad", "IOS PORT", "https://github.com/mianmuhammadse"},
+#endif
     {"DATFOOLDIVE", "ANY WEAPON IN ANY LEVEL", "https://github.com/datfooldive"},
     {"BAGASROMADON", "BUTTON SKIN", "https://github.com/bagasromadon"},
     {"Zukiru", "HDR SHADER", nullptr},

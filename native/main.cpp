@@ -193,7 +193,12 @@ void LogSystem() {
     std::time_t now = std::time(nullptr);
     char date[32] = {};
     std::strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
-    LOGR("%ls (%s), %s, build %s", kGame.title, IMAGE_XBE, date, BLACK_COMMIT);
+#ifdef __APPLE__
+    constexpr const char* kPort = "Black iOS";
+#else
+    constexpr const char* kPort = "Black Android";
+#endif
+    LOGR("%s: %ls (%s), %s, build %s", kPort, kGame.title, IMAGE_XBE, date, BLACK_COMMIT);
     LOGR("Path: %s", ExeDir().c_str());
     platform::LogDevice();
     LOGR("RAM: %.1f GB", SDL_GetSystemRAM() / 1024.0);
