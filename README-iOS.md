@@ -26,6 +26,7 @@ Other devices have not been tried.
 ```sh
 git clone https://github.com/mianmuhammadse/Black-Android.git && cd Black-Android
 git checkout ios
+mkdir -p iso && cp "/path/to/Black (USA).iso" iso/   # your disc image; iso/ and assets/ are gitignored, the game's files never leave your machine
 ./scripts/build-apple.sh                   # recompiles default.xbe from your ISO into generated/game (about 5 s once the tools are built)
 ./scripts/fetch-deps.sh ios                # SDL3 and MoltenVK for iOS
 ./scripts/apply-sdk-patches.sh             # clones the SDK to ../XboxXBE-Recomp (beside the repo) at the pinned commit and patches it
@@ -34,8 +35,7 @@ cmake -S . -B out/build/ios -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITE
 cmake --build out/build/ios --config Release --target main     # the first build takes 15 minutes or more
 ```
 
-Put the ISO in `iso/` (or `assets/`) before the first step; both folders are gitignored and the game's files never leave your machine.
-`PORTING_IOS.md` has the details and what was decided on the way. For a build on the Mac itself: `scripts/run-mac.sh`.
+(`assets/` works as well as `iso/`, or a `default.xbe` in `assets/`.) `PORTING_IOS.md` has the details and what was decided on the way. For a build on the Mac itself: `scripts/run-mac.sh`.
 
 ## Signing and installing
 
@@ -73,8 +73,10 @@ files and no saves; copy the game in again (`install-ios.sh game` or the Files a
 
 ## Game files
 
-Open the **Files** app, **On My iPhone**, **Black**, and put the ISO (or `default.xbe` with its files) in a folder named
-`Black` (make it if it is not there; the app lists the folders it looked in in its log when it finds no game). From the Mac: `./scripts/install-ios.sh game "Black (USA).iso"`.
+The game goes into the app's `Documents/Black` folder. In the **Files** app that is: **Browse, On My iPhone, Black** (the app's
+own folder, named after the app), and inside it a folder named **Black** (make it if it is not there). Put the ISO (or
+`default.xbe` with its files) in that inner **Black** folder: *On My iPhone / Black / Black / Black (USA).iso*. If the app finds
+no game it lists the folders it looked in, in its log. From the Mac: `./scripts/install-ios.sh game "Black (USA).iso"`.
 Saves and settings stay in the app's folder when you install a new build over the old one, with the same bundle id.
 
 ## HD textures (optional)
@@ -82,12 +84,12 @@ Saves and settings stay in the app's folder when you install a new build over th
 The game can use **BLACK HD Reimagined** by **HD REIMAGINED**, a texture pack made for the PS2 version. It is their work and
 is not part of this repository. Download it from
 [ModDB](https://www.moddb.com/mods/black-hd-reimagined/addons/black-hd-reimagined-texture-pack) and put the pack's files
-(any folder layout, the `.dds` and `.png` files) in `Documents/Black/hd` (Files app). The pairing of pack files with game
+(any folder layout, the `.dds` and `.png` files) in an `hd` folder next to the ISO: *On My iPhone / Black / Black / hd*. The pairing of pack files with game
 textures is [portingpete](https://github.com/portingpete)'s map from
 [Black-2006-Recomp](https://github.com/portingpete/Black-2006-Recomp) (MIT), kept in `textures/`.
 
 Then choose **Options, Graphics, Quality, Textures: HD**. It applies at once. The iPhone has no BC texture hardware, so the
-pack's files are decoded on the CPU and levels bigger than 512 px are left out (`BLACK_HD_MAX`).
+pack's files are decoded on the CPU and levels bigger than 1024 px are left out, and a file with one big level is scaled down to that (`BLACK_HD_MAX=<px>` changes the cap, 0 removes it).
 
 ## Known limits
 
