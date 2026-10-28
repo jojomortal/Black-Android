@@ -1,4 +1,14 @@
 # Black for Android
+
+## iOS
+
+This branch (`ios`) also builds for iPhone: see [README-iOS.md](README-iOS.md). The iOS port is by
+[Mian Muhammad](https://github.com/mianmuhammadse); it builds on this Android port by
+[RanggaCasper](https://github.com/RanggaCasper), on [XboxXBE-Recomp](https://github.com/TGP482/XboxXBE-Recomp) by TGP482,
+and the optional HD textures use [portingpete](https://github.com/portingpete)'s texture map for the BLACK HD Reimagined pack.
+The Android code on this branch has only been syntax-checked: Android users should use the
+[upstream repository](https://github.com/RanggaCasper/Black-Android).
+
 An unofficial native Android port of the original Xbox version of *Black*, with touch controls, gyroscope aiming, controller support and extended graphics options.
 
 The game's x86 code is statically recompiled ahead of time to C++ with [XboxXBE-Recomp](https://github.com/TGP482/XboxXBE-Recomp), then built for arm64. Drawing goes through Vulkan, and windowing, input and audio through SDL3. No emulator is involved.
