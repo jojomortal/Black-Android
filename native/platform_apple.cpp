@@ -21,8 +21,10 @@
 #if TARGET_OS_IPHONE
 #include <CoreFoundation/CoreFoundation.h>
 #include <os/log.h>
+#include <mach/mach.h>
 #include <os/proc.h>
 
+#include <algorithm>
 #include <chrono>
 #include <thread>
 #endif
@@ -82,9 +84,21 @@ void RedirectLog() {
     }).detach();
     // the file log is only flushed on a warning: a log read off the phone while the game runs would lag behind
     std::thread([] {
-        for (;;) {
+        size_t peak = 0, last = 0;
+        for (int tick = 1;; tick++) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
             logx::Flush();
+            // what the app holds (the footprint iOS kills by) every 10 s once it moved 20 MB, and its peak
+            task_vm_info_data_t vm;
+            mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+            if (tick % 10 || task_info(mach_task_self(), TASK_VM_INFO, reinterpret_cast<task_info_t>(&vm), &count) != KERN_SUCCESS)
+                continue;
+            size_t mb = size_t(vm.phys_footprint >> 20);
+            peak = std::max(peak, mb);
+            if (mb + 20 < last || mb > last + 20) {
+                last = mb;
+                LOGI("memory: footprint %zu MB, peak %zu MB, %zu MB available", mb, peak, size_t(os_proc_available_memory() >> 20));
+            }
         }
     }).detach();
 #endif
