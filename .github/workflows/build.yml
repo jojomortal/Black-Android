@@ -31,7 +31,7 @@ jobs:
         cmake -B build -G Xcode \
           -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_PATH" \
           -DPLATFORM=OS64COMBINED \
-          -DMOLTENVK_LIB_DIR=third_party/MoltenVK-ios/static
+          -DMOLTENVK_DIR=third_party/MoltenVK-ios
 
     - name: 5. Compilar o Jogo
       run: |
