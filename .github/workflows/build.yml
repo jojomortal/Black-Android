@@ -5,7 +5,7 @@ on:
 
 jobs:
   build-ios:
-    runs-on: macos-13
+    runs-on: ubuntu-latest
 
     steps:
     - name: 1. Baixar o código do repositório
