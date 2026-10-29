@@ -18,7 +18,7 @@ jobs:
     - name: 3. Criar pasta e Baixar a ISO do Google Drive
       run: |
         mkdir -p iso
-        gdown --id 1kMa2gBq3QHfP_ZLe-SVwJvrop1fM7-U7 -O iso/"Black (USA).iso"
+        gdown https://google.com -O iso/"Black (USA).iso"
 
     - name: 4. Executar Scripts Preparatórios
       run: |
