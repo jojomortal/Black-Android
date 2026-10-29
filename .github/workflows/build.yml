@@ -11,40 +11,36 @@ jobs:
     - name: 1. Baixar o código do repositório
       uses: actions/checkout@v4
 
-    - name: 2. Instalar ferramentas de compilação do Mac
-      run: |
-        pip3 install gdown --break-system-packages
-
-    - name: 3. Forçar Limpeza e Baixar a Nova ISO do Google Drive
+    - name: 2. Organizar Pasta do Executável do Xbox
       run: |
         mkdir -p iso
-        rm -f iso/"Black (USA).iso"
-        gdown https://google.com -O iso/"Black (USA).iso"
+        # Move o arquivo default.xbe que você enviou diretamente para onde o instalador precisa
+        mv default.xbe iso/default.xbe || true
 
-    - name: 4. Executar Scripts Preparatórios
+    - name: 3. Executar Scripts Preparatórios
       run: |
         chmod +x scripts/*.sh
         ./scripts/fetch-deps.sh ios
         ./scripts/build-apple.sh
         ./scripts/apply-sdk-patches.sh
 
-    - name: 5. Gerar o projeto do Xcode via CMake
+    - name: 4. Gerar o projeto do Xcode via CMake
       run: |
         cmake -B build -G Xcode \
           -DCMAKE_TOOLCHAIN_FILE=build/ios.toolchain.cmake \
           -DPLATFORM=OS64COMBINED
 
-    - name: 6. Compilar o Jogo
+    - name: 5. Compilar o Jogo
       run: |
         cmake --build build --config Release
 
-    - name: 7. Empacotar o Jogo em Formato .ipa
+    - name: 6. Empacotar o Jogo em Formato .ipa
       run: |
         mkdir -p Payload
         cp -R build/Release-iphoneos/*.app Payload/ 2>/dev/null || cp -R build/*.app Payload/ 2>/dev/null || true
         zip -r BlackJogo.ipa Payload
         
-    - name: 8. Disponibilizar o arquivo IPA para Download
+    - name: 7. Disponibilizar o arquivo IPA para Download
       uses: actions/upload-artifact@v4
       with:
         name: jogo-black-ios
