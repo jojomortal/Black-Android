@@ -13,9 +13,9 @@ jobs:
 
     - name: 2. Organizar Pasta do Executável do Xbox
       run: |
-        mkdir -p iso
-        # Move o arquivo default.xbe que você enviou diretamente para onde o instalador precisa
-        mv default.xbe iso/default.xbe || true
+        mkdir -p assets
+        # Move o arquivo default.xbe que você enviou diretamente para a pasta assets
+        mv default.xbe assets/default.xbe || true
 
     - name: 3. Executar Scripts Preparatórios
       run: |
