@@ -25,8 +25,12 @@ jobs:
 
     - name: 4. Gerar o projeto do Xcode via CMake
       run: |
+        # Busca automaticamente onde o arquivo ios.toolchain.cmake foi gerado
+        TOOLCHAIN_PATH=$(find . -name "ios.toolchain.cmake" -print -quit)
+        echo "Arquivo de configuração encontrado em: $TOOLCHAIN_PATH"
+        
         cmake -B build -G Xcode \
-          -DCMAKE_TOOLCHAIN_FILE=cmake/ios.toolchain.cmake \
+          -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_PATH" \
           -DPLATFORM=OS64COMBINED
 
     - name: 5. Compilar o Jogo
