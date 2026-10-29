@@ -40,6 +40,7 @@ jobs:
         echo "Arquivo de configuração encontrado em: $TOOLCHAIN_PATH"
         
         cmake -B build -G Xcode \
+          -DCMAKE_SYSTEM_NAME=iOS \
           -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_PATH" \
           -DPLATFORM=OS64 \
           -DENABLE_BITCODE=OFF \
