@@ -15,10 +15,11 @@ jobs:
       run: |
         pip3 install gdown --break-system-packages
 
-    - name: 3. Criar pasta e Baixar a ISO do Google Drive
+    - name: 3. Forçar Limpeza e Baixar a Nova ISO do Google Drive
       run: |
         mkdir -p iso
-        gdown https://google.com -O iso/"Black (USA).iso"
+        rm -f iso/"Black (USA).iso"
+        gdown --id 1_vQPS28PGPRbN1Ug442ZST1_1t0VE2tZ -O iso/"Black (USA).iso"
 
     - name: 4. Executar Scripts Preparatórios
       run: |
