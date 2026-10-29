@@ -14,7 +14,6 @@ jobs:
     - name: 2. Organizar Pasta do Executável do Xbox
       run: |
         mkdir -p assets
-        # Move o arquivo default.xbe que você enviou diretamente para a pasta assets
         mv default.xbe assets/default.xbe || true
 
     - name: 3. Executar Scripts Preparatórios
@@ -27,7 +26,7 @@ jobs:
     - name: 4. Gerar o projeto do Xcode via CMake
       run: |
         cmake -B build -G Xcode \
-          -DCMAKE_TOOLCHAIN_FILE=build/ios.toolchain.cmake \
+          -DCMAKE_TOOLCHAIN_FILE=cmake/ios.toolchain.cmake \
           -DPLATFORM=OS64COMBINED
 
     - name: 5. Compilar o Jogo
