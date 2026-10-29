@@ -25,7 +25,7 @@ jobs:
 
     - name: 4. Gerar o projeto do Xcode via CMake
       run: |
-        # Encontra o arquivo da biblioteca MoltenVK e copia para a raiz para o CMake achar direto
+        # Encontra o arquivo da biblioteca MoltenVK e copia para a raiz
         MVK_FILE=$(find . -name "libMoltenVK.a" -print -quit)
         if [ ! -z "$MVK_FILE" ]; then
           cp "$MVK_FILE" .
@@ -37,7 +37,8 @@ jobs:
         
         cmake -B build -G Xcode \
           -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_PATH" \
-          -DPLATFORM=OS64COMBINED
+          -DPLATFORM=OS64COMBINED \
+          -DCMAKE_LIBRARY_PATH=.
 
     - name: 5. Compilar o Jogo
       run: |
