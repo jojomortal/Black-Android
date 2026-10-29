@@ -32,13 +32,18 @@ jobs:
           echo "Biblioteca MoltenVK copiada com sucesso para a raiz!"
         fi
 
+        # Busca a pasta onde os headers do Vulkan (que contêm vulkan/vulkan.h) estão escondidos
+        VULKAN_INCLUDE_DIR=$(find . -path "*/vulkan/vulkan.h" -print -quit | sed 's/\/vulkan\/vulkan.h//')
+        echo "Headers do Vulkan encontrados em: $VULKAN_INCLUDE_DIR"
+
         TOOLCHAIN_PATH=$(find . -name "ios.toolchain.cmake" -print -quit)
         echo "Arquivo de configuração encontrado em: $TOOLCHAIN_PATH"
         
         cmake -B build -G Xcode \
           -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_PATH" \
           -DPLATFORM=OS64COMBINED \
-          -DCMAKE_LIBRARY_PATH=.
+          -DCMAKE_LIBRARY_PATH=. \
+          -DCMAKE_INCLUDE_PATH="$VULKAN_INCLUDE_DIR"
 
     - name: 5. Compilar o Jogo
       run: |
