@@ -25,7 +25,6 @@ jobs:
 
     - name: 4. Forçar Visibilidade da Pasta de Saves e Mods no App Arquivos
       run: |
-        # Localiza todos os Info.plist gerados no projeto para garantir a injeção
         find . -name "*Info.plist*" | while read PLIST_FILE; do
           echo "Injetando chaves de visibilidade em: $PLIST_FILE"
           plutil -insert UIFileSharingEnabled -bool true "$PLIST_FILE" 2>/dev/null || true
@@ -57,15 +56,13 @@ jobs:
       run: |
         cmake --build build --config Release --target main
 
-    - name: 7. Empacotar o Jogo em Formato .ipa com Pasta de Documentos
+    - name: 7. Empacotar o Jogo em Formato .ipa Limpo
       run: |
         mkdir -p Payload
-        cp -R build/Release-iphoneos/*.app Payload/ 2>/dev/null || cp -R build/*.app Payload/ 2>/dev/null || true
+        # Copia estritamente a pasta .app sem espalhar resíduos estruturais
+        cp -R build/Release-iphoneos/main.app Payload/ 2>/dev/null || cp -R build/Release-iphoneos/*.app Payload/ 2>/dev/null || cp -R build/*.app Payload/ 2>/dev/null || true
         
-        # Garante a criação de uma estrutura interna para forçar o iOS a exibir a pasta Documents
-        mkdir -p Payload/*.app/Documents 2>/dev/null || true
-        touch Payload/*.app/Documents/.keep 2>/dev/null || true
-        
+        # Compacta a estrutura no padrão oficial exigido pelo Sideloadly
         zip -r BlackJogo.ipa Payload
 
     - name: 8. Disponibilizar o arquivo IPA Pro para Download
