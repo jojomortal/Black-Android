@@ -25,13 +25,10 @@ jobs:
 
     - name: 4. Injetar Configurações Avançadas (120FPS, Mods no App Arquivos, HDMI)
       run: |
-        # Localiza o arquivo Info.plist principal do app para injetar as chaves do iOS
         PLIST_FILE=$(find . -name "*Info.plist*" -print -quit)
         if [ ! -z "$PLIST_FILE" ]; then
-          # Permite que a pasta do jogo apareça no app "Arquivos" do iPhone e no iTunes
           plutil -insert UIFileSharingEnabled -bool true "$PLIST_FILE" 2>/dev/null || true
           plutil -insert LSSupportsOpeningDocumentsInPlace -bool true "$PLIST_FILE" 2>/dev/null || true
-          # Habilita o suporte nativo para espelhamento em telas externas e cabos HDMI
           plutil -insert UISupportsExternalDisplays -bool true "$PLIST_FILE" 2>/dev/null || true
           echo "Configurações de Mods, HDMI e Telas injetadas com sucesso!"
         fi
@@ -54,8 +51,8 @@ jobs:
           -DENABLE_BITCODE=OFF \
           -DCMAKE_LIBRARY_PATH=. \
           -DCMAKE_INCLUDE_PATH="$VULKAN_INCLUDE_DIR" \
-          -DCMAKE_CXX_FLAGS="-O3 -ffast-math -flto -DMAX_FPS=120" \
-          -DCMAKE_C_FLAGS="-O3 -ffast-math -flto -DMAX_FPS=120"
+          -DCMAKE_CXX_FLAGS="-O3 -flto -DMAX_FPS=120" \
+          -DCMAKE_C_FLAGS="-O3 -flto -DMAX_FPS=120"
 
     - name: 6. Compilar o Jogo
       run: |
