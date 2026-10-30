@@ -41,6 +41,7 @@ jobs:
         
         cmake -B build -G Xcode \
           -DCMAKE_SYSTEM_NAME=iOS \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
           -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_PATH" \
           -DPLATFORM=OS64 \
           -DENABLE_BITCODE=OFF \
