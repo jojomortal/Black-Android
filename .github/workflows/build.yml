@@ -23,14 +23,18 @@ jobs:
         ./scripts/build-apple.sh
         ./scripts/apply-sdk-patches.sh
 
-    - name: 4. Injetar Configurações Avançadas (120FPS, Mods no App Arquivos, HDMI)
+    - name: 4. Injetar Configurações de Espelhamento HDMI e Mods (Garantido Sem Crash)
       run: |
         PLIST_FILE=$(find . -name "*Info.plist*" -print -quit)
         if [ ! -z "$PLIST_FILE" ]; then
+          # Mantém a pasta ativa no app Arquivos e no PC para carregar os seus MODs
           plutil -insert UIFileSharingEnabled -bool true "$PLIST_FILE" 2>/dev/null || true
           plutil -insert LSSupportsOpeningDocumentsInPlace -bool true "$PLIST_FILE" 2>/dev/null || true
-          plutil -insert UISupportsExternalDisplays -bool true "$PLIST_FILE" 2>/dev/null || true
-          echo "Configurações de Mods, HDMI e Telas injetadas com sucesso!"
+          
+          # Remove e desativa o modo de janela estendida que causava o colapso do motor gráfico na TV
+          plutil -remove UISupportsExternalDisplays "$PLIST_FILE" 2>/dev/null || true
+          plutil -insert UISupportsExternalDisplays -bool false "$PLIST_FILE" 2>/dev/null || true
+          echo "Configuração ajustada para Espelhamento de TV Seguro (Anti-Crash)!"
         fi
 
     - name: 5. Gerar o projeto do Xcode com Otimização Máxima
