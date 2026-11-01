@@ -23,12 +23,21 @@ jobs:
         ./scripts/build-apple.sh
         ./scripts/apply-sdk-patches.sh
 
-    - name: 4. Forçar Visibilidade da Pasta de Saves e Mods no App Arquivos
+    - name: 4. Injetar Marca D'água JOJOMORTAL, Espelhamento e Mods
       run: |
         find . -name "*Info.plist*" | while read PLIST_FILE; do
-          echo "Injetando chaves de visibilidade em: $PLIST_FILE"
+          echo "Injetando assinatura de autoria e visibilidade em: $PLIST_FILE"
+          # Permite que a pasta apareça no app Arquivos nativo imediatamente
           plutil -insert UIFileSharingEnabled -bool true "$PLIST_FILE" 2>/dev/null || true
           plutil -insert LSSupportsOpeningDocumentsInPlace -bool true "$PLIST_FILE" 2>/dev/null || true
+          
+          # Desativa o modo de duas janelas que crashava a TV via HDMI
+          plutil -remove UISupportsExternalDisplays "$PLIST_FILE" 2>/dev/null || true
+          plutil -insert UISupportsExternalDisplays -bool false "$PLIST_FILE" 2>/dev/null || true
+          
+          # Injeta a sua assinatura digital e créditos de autoria nos metadados do aplicativo
+          plutil -insert NSHumanReadableCopyright -string "Compilado e Turbinado por JOJOMORTAL" "$PLIST_FILE" 2>/dev/null || true
+          plutil -insert CFBundleGetInfoString -string "Launcher Black iOS - Customizado por JOJOMORTAL" "$PLIST_FILE" 2>/dev/null || true
         done
 
     - name: 5. Gerar o projeto do Xcode com Otimização Máxima
@@ -56,17 +65,20 @@ jobs:
       run: |
         cmake --build build --config Release --target main
 
-    - name: 7. Empacotar o Jogo em Formato .ipa Limpo
+    - name: 7. Empacotar o Jogo em Formato .ipa Estruturado
       run: |
         mkdir -p Payload
-        # Copia estritamente a pasta .app sem espalhar resíduos estruturais
         cp -R build/Release-iphoneos/main.app Payload/ 2>/dev/null || cp -R build/Release-iphoneos/*.app Payload/ 2>/dev/null || cp -R build/*.app Payload/ 2>/dev/null || true
         
-        # Compacta a estrutura no padrão oficial exigido pelo Sideloadly
+        # Localiza o aplicativo e injeta o arquivo inicial que força a pasta a aparecer no app Arquivos
+        TARGET_APP=$(find Payload -name "*.app" -print -quit)
+        mkdir -p "$TARGET_APP/Documents"
+        echo "Launcher customizado e otimizado por JOJOMORTAL. Insira a sua ISO de Xbox aqui!" > "$TARGET_APP/Documents/AUTORIA_JOJOMORTAL.txt"
+        
         zip -r BlackJogo.ipa Payload
 
     - name: 8. Disponibilizar o arquivo IPA Pro para Download
       uses: actions/upload-artifact@v4
       with:
-        name: jogo-black-ios-turbinado
+        name: jogo-black-ios-jojomortal
         path: BlackJogo.ipa
